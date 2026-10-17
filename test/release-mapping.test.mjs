@@ -88,10 +88,20 @@ test("planUpstreamProposal selects highest non-deprecated stable despite latest 
   assert.equal(original.manifest.version, "0.79.4");
 });
 
+test("planUpstreamProposal selects the highest stable release after npm undeprecates it", async () => {
+  const fixture = registry(["0.79.2", "0.80.0"]);
+  fixture.packument.versions["0.80.0"].deprecated = "";
+  const plan = await planUpstreamProposal(inputs(), fixture.fetchBytes);
+  assert.equal(plan.report.selected.version, "0.80.0");
+  assert.equal(plan.report.adapterVersion, "0.80.0");
+  assert.ok(plan.updated);
+  assert.equal(fixture.calls.length, 3);
+});
+
 test("planUpstreamProposal reports no eligible update honestly and fails closed on changed bytes/network/missing baseline", async () => {
   for (const versions of [[], ["0.80.0"]]) {
     const fixture = registry(versions);
-    if (versions.length) fixture.packument.versions["0.80.0"].deprecated = "";
+    if (versions.length) fixture.packument.versions["0.80.0"].deprecated = "Do not select";
     const plan = await planUpstreamProposal(inputs(), fixture.fetchBytes);
     assert.equal(plan.updated, null);
     assert.equal(plan.report.selected, null);

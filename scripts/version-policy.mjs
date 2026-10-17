@@ -12,5 +12,5 @@ export function nextAdapterVersion(adapter, upstreamCandidate) {
 // Enumeration is sorted numerically; deprecated versions remain visible but are
 // never selected automatically. Intermediate releases do not each get a PR.
 export function selectUpstreamCandidate(report) {
-  return report.candidates.filter((candidate) => candidate.deprecated === null).at(-1) ?? null;
+  return report.candidates.filter((candidate) => candidate.deprecated === null || candidate.deprecated === "").at(-1) ?? null;
 }
