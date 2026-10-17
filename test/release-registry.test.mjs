@@ -3,7 +3,9 @@ import { test } from "node:test";
 import { enumerateStableReleases, fetchRegistryBytes, verifyIntegrity } from "../scripts/registry.mjs";
 import { packageRoot, readJson } from "../scripts/release-inputs.mjs";
 
-const { upstream: pinned } = await readJson(new URL("upstream-lock.json", packageRoot));
+const { upstream } = await readJson(new URL("upstream-lock.json", packageRoot));
+// Fixed enumeration baseline: tests must also pass after a proposal advances the real mapping.
+const pinned = { ...upstream, version: "0.79.0", tarball: "https://registry.npmjs.org/pi-subagents/-/pi-subagents-0.79.0.tgz" };
 const distribution = (version) => ({
   name: "pi-subagents", version,
   dist: { tarball: `https://registry.npmjs.org/pi-subagents/-/pi-subagents-${version}.tgz`, integrity: pinned.integrity },

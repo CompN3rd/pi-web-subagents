@@ -1,10 +1,14 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { gunzipSync } from "node:zlib";
-import { validateDistribution } from "./registry.mjs";
+import { compareStable, validateDistribution } from "./registry.mjs";
+import { releasePolicy } from "./version-policy.mjs";
 
 export const packageRoot = new URL("../", import.meta.url);
-export const tarballName = "compn3rd-pi-web-subagents-0.79.0.tgz";
+export function tarballName(manifest, upstreamLock) {
+  validateManifest(manifest, upstreamLock);
+  return `${manifest.name.slice(1).replace("/", "-")}-${manifest.version}.tgz`;
+}
 const allowedFiles = [
   "package.json", "README.md", "LICENSE", "upstream-lock.json",
   "dist/browser/index.js", "dist/server.js",
@@ -13,14 +17,17 @@ export const readJson = async (url) => JSON.parse(await readFile(url, "utf8"));
 
 export function validateManifest(manifest, upstreamLock) {
   assert.equal(manifest.name, "@compn3rd/pi-web-subagents");
-  assert.equal(manifest.version, "0.79.0", "Future adapter versions require an owner-approved numbering policy");
+  compareStable(manifest.version, manifest.version);
   assert.notEqual(manifest.private, true);
   assert.equal(manifest.type, "module");
   assert.equal(manifest.license, "MIT");
   assert.deepEqual(manifest.engines, { node: ">=24" });
   assert.deepEqual(manifest.files, ["dist/", "README.md", "LICENSE", "upstream-lock.json"]);
   assert.deepEqual(manifest.publishConfig, { access: "public", registry: "https://registry.npmjs.org/" });
-  assert.deepEqual(manifest.peerDependencies, { "pi-subagents": "0.79.0" });
+  assert.deepEqual(manifest.repository, { type: "git", url: "git+https://github.com/CompN3rd/pi-web-subagents.git" });
+  assert.equal(manifest.homepage, "https://github.com/CompN3rd/pi-web-subagents#readme");
+  assert.deepEqual(manifest.bugs, { url: "https://github.com/CompN3rd/pi-web-subagents/issues" });
+  assert.deepEqual(manifest.peerDependencies, { "pi-subagents": upstreamLock.upstream.version });
   assert.deepEqual(manifest.peerDependenciesMeta, { "pi-subagents": { optional: true } });
   assert.deepEqual(manifest.piWeb, { plugins: [{
     id: "compn3rd.subagents", browserRoot: "dist/browser", module: "dist/browser/index.js",
@@ -33,6 +40,7 @@ export function validateManifest(manifest, upstreamLock) {
     assert.equal(manifest.scripts?.[hook], undefined, `Release lifecycle hook forbidden: ${hook}`);
   }
   assert.equal(upstreamLock.schemaVersion, 1);
+  assert.equal(upstreamLock.releasePolicy, releasePolicy);
   assert.deepEqual(upstreamLock.adapter, { name: manifest.name, version: manifest.version });
   assert.equal(upstreamLock.upstream.name, "pi-subagents");
   assert.equal(upstreamLock.upstream.version, manifest.peerDependencies["pi-subagents"]);
@@ -52,6 +60,11 @@ export async function validateReleaseInputs(root = packageRoot) {
     readJson(new URL("package.json", root)), readJson(new URL("upstream-lock.json", root)), readJson(new URL("package-lock.json", root)),
   ]);
   validateManifest(manifest, upstreamLock);
+  validateNpmLock(manifest, npmLock);
+  return { manifest, upstreamLock, npmLock };
+}
+
+export function validateNpmLock(manifest, npmLock) {
   assert.equal(npmLock.lockfileVersion, 3);
   assert.equal(npmLock.name, manifest.name);
   assert.equal(npmLock.version, manifest.version);
@@ -68,7 +81,6 @@ export async function validateReleaseInputs(root = packageRoot) {
     assert.match(entry.integrity ?? "", /^sha512-/);
     assert.ok(!/(^|\/)node_modules\/pi-subagents($|\/)/.test(name), "Upstream must remain separately installed");
   }
-  return { manifest, upstreamLock };
 }
 
 // The package has six short filenames: accept only ordinary regular-file tar

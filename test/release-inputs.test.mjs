@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { gzipSync } from "node:zlib";
 import { test } from "node:test";
-import { packageRoot, readJson, readPackageTarball, validateManifest, validateReleaseInputs } from "../scripts/release-inputs.mjs";
+import { packageRoot, readJson, readPackageTarball, tarballName, validateManifest, validateReleaseInputs } from "../scripts/release-inputs.mjs";
 
 const manifest = await readJson(new URL("package.json", packageRoot));
 const upstreamLock = await readJson(new URL("upstream-lock.json", packageRoot));
@@ -36,13 +36,15 @@ function tarball(extra = [], omit = []) {
 
 test("validateReleaseInputs accepts independent exact package and lock without installing the engine", async () => {
   const result = await validateReleaseInputs();
-  assert.equal(result.manifest.version, "0.79.0");
+  assert.equal(result.manifest.version, manifest.version);
   assert.equal(result.upstreamLock.host.browserApiVersion, 4);
 });
 
-test("validateManifest rejects future version policy, broad browser root, runtime installs and lifecycle hooks", () => {
+test("validateManifest rejects mapping mismatch, broad browser root, runtime installs and lifecycle hooks", () => {
   for (const mutate of [
-    (value) => { value.version = "0.79.1"; },
+    (value) => { value.version = "1.2.3-beta.1"; },
+    (value) => { value.peerDependencies["pi-subagents"] = "^0.79.0"; },
+    (value) => { value.repository.url = "git+https://github.com/other/repo.git"; },
     (value) => { value.piWeb.plugins[0].browserRoot = "."; },
     (value) => { value.dependencies = { "pi-subagents": "0.79.0" }; },
     (value) => { value.peerDependenciesMeta["pi-subagents"].optional = false; },
@@ -90,4 +92,19 @@ test("readPackageTarball rejects traversal, links, duplicate records, bundled en
   assert.throws(() => readPackageTarball(tarball([], ["package/dist/server.js"])), /Missing package files/);
   assert.throws(() => readPackageTarball(Buffer.from("not gzip")));
   assert.throws(() => readPackageTarball(Buffer.alloc(8 * 1024 * 1024 + 1)), /exceeds 8 MiB/);
+});
+
+test("tarballName derives independent stable adapter version only after manifest validation", () => {
+  const candidate = structuredClone(manifest);
+  const lock = structuredClone(upstreamLock);
+  candidate.version = lock.adapter.version = "0.99.12";
+  validateManifest(candidate, lock);
+  assert.equal(tarballName(candidate, lock), "compn3rd-pi-web-subagents-0.99.12.tgz");
+  for (const version of ["01.2.3", "1.2", "1.2.3-beta.1", "1.2.3+build", "../../escape", "1.2.3;unsafe"]) {
+    candidate.version = lock.adapter.version = version;
+    assert.throws(() => tarballName(candidate, lock));
+  }
+  candidate.version = "0.99.13";
+  lock.adapter.version = "0.99.12";
+  assert.throws(() => tarballName(candidate, lock));
 });

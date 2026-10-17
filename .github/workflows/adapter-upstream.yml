@@ -1,0 +1,121 @@
+name: Adapter upstream proposal
+
+on:
+  schedule:
+    - cron: '23 9 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: adapter-upstream-proposal
+  cancel-in-progress: false
+
+jobs:
+  proposal:
+    if: github.ref == 'refs/heads/main' && vars.ADAPTER_UPSTREAM_PROPOSALS_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    outputs:
+      candidate: ${{ steps.plan.outputs.candidate }}
+      branch: ${{ steps.branch.outputs.branch }}
+      sha: ${{ steps.branch.outputs.sha }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: '24.20.0'
+      - name: Verify registry bytes and prepare one deterministic mapping
+        id: plan
+        run: node scripts/propose-upstream.mjs --apply
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: upstream-proposal
+          path: artifacts/upstream-proposal.json
+          if-no-files-found: error
+          retention-days: 30
+      - name: Create branch or reuse its identical reviewed tree (never force push)
+        if: steps.plan.outputs.candidate != ''
+        id: branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE: ${{ steps.plan.outputs.candidate }}
+        run: |
+          set -euo pipefail
+          branch="automation/upstream-$CANDIDATE"
+          gh auth setup-git
+          git add -- package.json package-lock.json upstream-lock.json
+          expected_tree=$(git write-tree)
+          remote=$(git ls-remote --heads origin "refs/heads/$branch")
+          if [ -n "$remote" ]; then
+            git fetch --no-tags origin "refs/heads/$branch"
+            test "$expected_tree" = "$(git rev-parse 'FETCH_HEAD^{tree}')" || {
+              echo 'Existing branch differs (human edits or changed main); refusing to overwrite. Owner must review and reconcile it.' >&2
+              exit 1
+            }
+            sha=$(git rev-parse FETCH_HEAD)
+          else
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git commit -m "Propose pi-subagents $CANDIDATE mapping"
+            sha=$(git rev-parse HEAD)
+            git push origin "HEAD:refs/heads/$branch"
+          fi
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+  # GITHUB_TOKEN branch/PR writes do NOT trigger ordinary pull_request CI.
+  # Run the identical Windows/Linux validation explicitly on the proposed SHA.
+  validate:
+    needs: proposal
+    if: needs.proposal.outputs.candidate != ''
+    uses: ./.github/workflows/adapter-ci.yml
+    with:
+      ref: ${{ needs.proposal.outputs.sha }}
+
+  pull-request:
+    needs: [proposal, validate]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: upstream-proposal
+          path: artifacts
+      - name: Create or reuse PR only after explicit candidate validation
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ needs.proposal.outputs.branch }}
+          CANDIDATE: ${{ needs.proposal.outputs.candidate }}
+          CANDIDATE_SHA: ${{ needs.proposal.outputs.sha }}
+        run: |
+          set -euo pipefail
+          # Fail closed if someone changed the remote branch during validation.
+          test "$(git ls-remote --heads origin "refs/heads/$BRANCH" | cut -f1)" = "$CANDIDATE_SHA"
+          {
+            printf '## Upstream mapping proposal\n\nCandidate commit: `%s`\n\n' "$CANDIDATE_SHA"
+            printf 'Windows/Linux tests, typecheck, build, pack and registry integrity validation ran explicitly in %s/%s/actions/runs/%s. GITHUB_TOKEN-created PRs do not trigger normal PR CI; this run is the evidence, not a claimed PR check.\n\n' "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID"
+            printf 'Requires independent source/API review, packed real-host acceptance and owner approval. No auto merge. Integrity does not prove publisher identity. Engine is not bundled.\n\n```json\n'
+            cat artifacts/upstream-proposal.json
+            printf '\n```\n'
+          } > artifacts/upstream-pr.md
+          existing=$(gh pr list --state all --base main --head "$BRANCH" --json number --jq 'length')
+          if [ "$existing" = 0 ]; then
+            gh pr create --base main --head "$BRANCH" --title "Review pi-subagents $CANDIDATE mapping" --body-file artifacts/upstream-pr.md
+          else
+            echo 'Existing PR retained (including closed/rejected PRs); no edits, reopen or auto merge.'
+            gh pr list --state all --base main --head "$BRANCH"
+          fi

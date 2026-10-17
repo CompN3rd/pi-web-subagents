@@ -4,27 +4,49 @@
   "description": "Pi Web adapter for a separately installed pi-subagents RPC event bus",
   "type": "module",
   "license": "MIT",
-  "engines": { "node": ">=24" },
-  "files": ["dist/", "README.md", "LICENSE", "upstream-lock.json"],
-  "publishConfig": { "access": "public", "registry": "https://registry.npmjs.org/" },
-  "piWeb": {
-    "plugins": [{
-      "id": "compn3rd.subagents",
-      "browserRoot": "dist/browser",
-      "module": "dist/browser/index.js",
-      "serverModule": "dist/server.js",
-      "machineSpecific": true
-    }]
+  "engines": {
+    "node": ">=24"
   },
-  "peerDependencies": { "pi-subagents": "0.79.0" },
-  "peerDependenciesMeta": { "pi-subagents": { "optional": true } },
+  "files": [
+    "dist/",
+    "README.md",
+    "LICENSE",
+    "upstream-lock.json"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "piWeb": {
+    "plugins": [
+      {
+        "id": "compn3rd.subagents",
+        "browserRoot": "dist/browser",
+        "module": "dist/browser/index.js",
+        "serverModule": "dist/server.js",
+        "machineSpecific": true
+      }
+    ]
+  },
+  "peerDependencies": {
+    "pi-subagents": "0.79.0"
+  },
+  "peerDependenciesMeta": {
+    "pi-subagents": {
+      "optional": true
+    }
+  },
   "scripts": {
     "build": "node scripts/build.mjs",
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test test/*.test.*",
     "test:release": "node --test test/release*.test.mjs",
     "verify:release": "node scripts/verify-release.mjs",
-    "detect:upstream": "node scripts/detect-upstream.mjs"
+    "detect:upstream": "node scripts/detect-upstream.mjs",
+    "propose:upstream": "node scripts/propose-upstream.mjs",
+    "release:version": "node scripts/release-version.mjs",
+    "pack:release": "node scripts/pack-release.mjs",
+    "test:browser": "node test/smoke/pi-web-adapter-browser.mjs"
   },
   "devDependencies": {
     "@jmfederico/pi-web": "1.202610.3",
@@ -33,5 +55,13 @@
     "lit": "3.3.3",
     "tsx": "4.23.15",
     "typescript": "5.9.3"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/CompN3rd/pi-web-subagents.git"
+  },
+  "homepage": "https://github.com/CompN3rd/pi-web-subagents#readme",
+  "bugs": {
+    "url": "https://github.com/CompN3rd/pi-web-subagents/issues"
   }
 }

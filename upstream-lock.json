@@ -1,6 +1,9 @@
 {
   "schemaVersion": 1,
-  "adapter": { "name": "@compn3rd/pi-web-subagents", "version": "0.79.0" },
+  "adapter": {
+    "name": "@compn3rd/pi-web-subagents",
+    "version": "0.79.0"
+  },
   "upstream": {
     "name": "pi-subagents",
     "version": "0.79.0",
@@ -14,5 +17,5 @@
     "serverApiVersion": 3
   },
   "transport": "separately-installed-pi-subagents-rpc-event-bus",
-  "releasePolicy": "Initial 0.79.0 only; adapter-only fixes and future numbering require owner approval."
+  "releasePolicy": "Stable adapter versions are independent: adapter-only fixes increment patch; a newer upstream maps to its version if greater than the adapter, otherwise adapter patch + 1. Exact engine mapping is recorded separately."
 }

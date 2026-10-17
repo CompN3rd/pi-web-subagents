@@ -1,8 +1,9 @@
 import { createHash } from "node:crypto";
 
 export const REGISTRY = "https://registry.npmjs.org/";
-const stablePattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
-const versionPattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
+// Absolute end, unlike $, also rejects a trailing newline in output/branch inputs.
+const stablePattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?![\s\S])/;
+const versionPattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?![\s\S])/;
 export function compareStable(a, b) {
   if (!stablePattern.test(a) || !stablePattern.test(b)) throw new Error("Expected stable x.y.z versions");
   const left = a.split(".").map(BigInt);

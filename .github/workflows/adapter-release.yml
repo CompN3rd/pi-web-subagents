@@ -1,7 +1,8 @@
 name: Adapter release
 
-# No root release trigger, schedule, automatic versioning, or credentials fallback.
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -12,13 +13,20 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  checks:
+    if: github.ref == 'refs/heads/main' && vars.ADAPTER_PUBLISH_ENABLED == 'true'
+    uses: ./.github/workflows/adapter-ci.yml
+    with:
+      ref: ${{ github.sha }}
+
   build:
+    needs: checks
     if: github.ref == 'refs/heads/main' && vars.ADAPTER_PUBLISH_ENABLED == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         shell: bash
-        working-directory: packages/pi-web-subagents
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
@@ -28,34 +36,33 @@ jobs:
         with:
           node-version: '24.20.0'
           cache: npm
-          cache-dependency-path: packages/pi-web-subagents/package-lock.json
       - run: npm ci --ignore-scripts
-      - run: npm run typecheck
-      - run: npm test
       - run: npm run build
       - name: Pack once and verify exact release input
         id: packed-input
         run: |
-          mkdir -p artifacts
-          npm pack --ignore-scripts --pack-destination artifacts
-          npm run verify:release -- --tarball artifacts/compn3rd-pi-web-subagents-0.79.0.tgz
-          echo "sha256=$(sha256sum artifacts/compn3rd-pi-web-subagents-0.79.0.tgz | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
+          npm run pack:release
+          filename=$(node --input-type=module -e 'import {tarballName,validateReleaseInputs} from "./scripts/release-inputs.mjs"; const {manifest,upstreamLock}=await validateReleaseInputs(); console.log(tarballName(manifest,upstreamLock));')
+          node scripts/verify-release.mjs --tarball "artifacts/$filename"
+          echo "sha256=$(sha256sum "artifacts/$filename" | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         id: packed
         with:
           name: adapter-package
-          path: packages/pi-web-subagents/artifacts/compn3rd-pi-web-subagents-0.79.0.tgz
+          path: artifacts/${{ steps.packed-input.outputs.filename }}
           if-no-files-found: error
           retention-days: 7
     outputs:
       artifact-id: ${{ steps.packed.outputs.artifact-id }}
+      filename: ${{ steps.packed-input.outputs.filename }}
       sha256: ${{ steps.packed-input.outputs.sha256 }}
 
   publish:
     needs: build
     if: github.ref == 'refs/heads/main' && vars.ADAPTER_PUBLISH_ENABLED == 'true'
     runs-on: ubuntu-latest
-    # Owner must configure restricted branches and required reviewers before enabling.
+    timeout-minutes: 10
+    # Configure restricted branches and required reviewers before enabling.
     environment: adapter-release
     permissions:
       contents: read
@@ -63,7 +70,6 @@ jobs:
     defaults:
       run:
         shell: bash
-        working-directory: packages/pi-web-subagents
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
@@ -72,7 +78,6 @@ jobs:
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: '24.20.0'
-          registry-url: https://registry.npmjs.org
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           artifact-ids: ${{ needs.build.outputs.artifact-id }}
@@ -81,8 +86,13 @@ jobs:
       - name: Recheck tarball without installing or executing package dependencies
         env:
           EXPECTED_SHA256: ${{ needs.build.outputs.sha256 }}
+          TARBALL: ${{ needs.build.outputs.filename }}
         run: |
-          echo "$EXPECTED_SHA256  $GITHUB_WORKSPACE/adapter-artifact/compn3rd-pi-web-subagents-0.79.0.tgz" | sha256sum --check --strict
-          node scripts/verify-release.mjs --packed-only "$GITHUB_WORKSPACE/adapter-artifact/compn3rd-pi-web-subagents-0.79.0.tgz"
-      - name: Publish only the verified scoped tarball using npm trusted publishing
-        run: npm publish "$GITHUB_WORKSPACE/adapter-artifact/compn3rd-pi-web-subagents-0.79.0.tgz" --access public --provenance --ignore-scripts
+          echo "$EXPECTED_SHA256  adapter-artifact/$TARBALL" | sha256sum --check --strict
+          node scripts/verify-release.mjs --packed-only "adapter-artifact/$TARBALL"
+      - name: Publish verified scoped tarball using npm trusted publishing only
+        env:
+          TARBALL: ${{ needs.build.outputs.filename }}
+        run: |
+          test -z "${NODE_AUTH_TOKEN:-}${NPM_TOKEN:-}"
+          npm publish "adapter-artifact/$TARBALL" --access public --provenance --ignore-scripts
