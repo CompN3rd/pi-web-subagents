@@ -1,0 +1,37 @@
+{
+  "name": "@compn3rd/pi-web-subagents",
+  "version": "0.79.0",
+  "description": "Pi Web adapter for a separately installed pi-subagents RPC event bus",
+  "type": "module",
+  "license": "MIT",
+  "engines": { "node": ">=24" },
+  "files": ["dist/", "README.md", "LICENSE", "upstream-lock.json"],
+  "publishConfig": { "access": "public", "registry": "https://registry.npmjs.org/" },
+  "piWeb": {
+    "plugins": [{
+      "id": "compn3rd.subagents",
+      "browserRoot": "dist/browser",
+      "module": "dist/browser/index.js",
+      "serverModule": "dist/server.js",
+      "machineSpecific": true
+    }]
+  },
+  "peerDependencies": { "pi-subagents": "0.79.0" },
+  "peerDependenciesMeta": { "pi-subagents": { "optional": true } },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test test/*.test.*",
+    "test:release": "node --test test/release*.test.mjs",
+    "verify:release": "node scripts/verify-release.mjs",
+    "detect:upstream": "node scripts/detect-upstream.mjs"
+  },
+  "devDependencies": {
+    "@jmfederico/pi-web": "1.202610.3",
+    "@types/node": "24.19.2",
+    "esbuild": "0.28.2",
+    "lit": "3.3.3",
+    "tsx": "4.23.15",
+    "typescript": "5.9.3"
+  }
+}

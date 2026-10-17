@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "adapter": { "name": "@compn3rd/pi-web-subagents", "version": "0.79.0" },
+  "upstream": {
+    "name": "pi-subagents",
+    "version": "0.79.0",
+    "tarball": "https://registry.npmjs.org/pi-subagents/-/pi-subagents-0.79.0.tgz",
+    "integrity": "sha512-9FVPNxqYEKvimSGmQF3BqdofGTrrbY33DAS9rgtlnuvdGOvhjbhZeL2bwKYi1VOaSJcV033UpcVGLbNL4H4OOA=="
+  },
+  "host": {
+    "name": "@jmfederico/pi-web",
+    "version": "1.202610.3",
+    "browserApiVersion": 4,
+    "serverApiVersion": 3
+  },
+  "transport": "separately-installed-pi-subagents-rpc-event-bus",
+  "releasePolicy": "Initial 0.79.0 only; adapter-only fixes and future numbering require owner approval."
+}
