@@ -486,7 +486,10 @@ export class SubagentsPanel extends LitElement {
   };
   protected override render(): TemplateResult {
     const state = this.controller.state;
-    const disabledRun = !this.hasRun();
+    const selectedRun = state.status?.asyncSnapshot?.runs.find(
+      (run) => run.id === this.selected,
+    );
+    const disabledRun = !selectedRun;
     return html`<main
       aria-label="Subagents supervision"
       aria-busy=${state.refreshing || state.busy}
@@ -541,13 +544,9 @@ export class SubagentsPanel extends LitElement {
         </p>
       </details>
       ${keyed(this.formScope, overview(state, this.choose, this.selected))}
-      <section aria-labelledby="control-heading">
-        <h2 id="control-heading">Run inspector</h2>
-        <p>
-          ${this.hasRun()
-            ? html`Whole-run target: <code>${this.selected}</code>`
-            : "Select a top-level async run above."}
-        </p>
+      ${selectedRun ? keyed(JSON.stringify([this.formScope, this.selected]), html`<section aria-labelledby="control-heading">
+        <h2 id="control-heading">${selectedRun.label} — Details & controls</h2>
+        <p>Whole-run target: <code>${this.selected}</code></p>
         <form
           @submit=${(event: Event) => {
             const data = this.form(event);
@@ -640,7 +639,7 @@ export class SubagentsPanel extends LitElement {
           Resume uses the saved launch contract. Stop returns “stopping”, not
           terminal proof. Queued or delivered steering is not completion.
         </p>
-        ${state.transcript
+        ${state.transcript && state.transcriptId === this.selected
           ? html`<h3>Targeted output · ${state.transcriptId}</h3>
               <p class="meta">Last explicit read; not a live transcript.</p>
               <pre tabindex="0" aria-label="Targeted run output">
@@ -655,7 +654,7 @@ ${JSON.stringify(state.transcript.details, null, 2)}</pre
                   </details>`
                 : nothing}`
           : nothing}
-      </section>
+      </section>`) : nothing}
       <section>
         <h2>Launch async work</h2>
         <details>

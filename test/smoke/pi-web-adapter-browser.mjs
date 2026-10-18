@@ -85,7 +85,9 @@ try {
     .waitFor({ state: "attached" });
   assert.equal(await page.locator("img").count(), 0);
   assert.equal(await page.evaluate(() => window.evil), undefined);
+  assert.equal(await page.locator("#control-heading").count(), 0);
   await page.locator("button.run").first().click();
+  await page.getByRole("heading", { name: /Details & controls/ }).waitFor();
   const stop = page.getByRole("button", { name: "Stop run…", exact: true });
   await stop.click();
   assert.equal(
@@ -136,8 +138,10 @@ try {
       (call) => call.method === "status" && call.sessionId === "session-2",
     ),
   );
-  assert.equal(await page.locator('textarea[name="message"]').inputValue(), "");
+  assert.equal(await page.locator("#control-heading").count(), 0);
   assert.equal(await page.locator(".confirmation").count(), 0);
+  await page.locator("button.run").first().click();
+  assert.equal(await page.locator('textarea[name="message"]').inputValue(), "");
   const refresh = async () => {
     await page.getByRole("button", { name: "Refresh status", exact: true }).click();
     await page.getByRole("button", { name: "Refresh status", exact: true }).waitFor();
@@ -242,7 +246,7 @@ try {
   await page.getByRole("button", { name: "Refresh status", exact: true }).evaluate((element) => element.click());
   await isolated.waitFor({ state: "detached" });
   assert.equal(await page.locator("#runs-heading").evaluate((element) => element.getRootNode().activeElement === element), true);
-  assert.equal(await stop.isDisabled(), true);
+  assert.equal(await page.locator("#control-heading").count(), 0);
   await page.getByRole("button", { name: "Duplicate B", exact: true }).click();
   assert.equal(await graph.locator('button.run[aria-pressed="true"]').count(), 2, "duplicate upstream IDs remain the same authoritative target");
   await root.click();
@@ -250,8 +254,10 @@ try {
   await page.evaluate(() => window.fixture.switchSession("session-graph"));
   await page.waitForFunction(() => window.fixture.calls.some((call) => call.method === "status" && call.sessionId === "session-graph"));
   await root.waitFor();
-  assert.equal(await page.locator('textarea[name="message"]').inputValue(), "");
+  assert.equal(await page.locator("#control-heading").count(), 0);
   assert.equal(await graph.locator('button.run[aria-pressed="true"]').count(), 0);
+  await root.click();
+  assert.equal(await page.locator('textarea[name="message"]').inputValue(), "");
   assert.equal(await branch.getAttribute("open"), null, "scope resets native branch disclosure");
   assert.equal(await connected.locator(".node-details[open]").count(), 0);
 
@@ -271,7 +277,7 @@ try {
   await page.evaluate(() => window.fixture.setGraph("unavailable"));
   await refresh();
   await page.getByText("Controls require an authoritative", { exact: false }).waitFor();
-  assert.equal(await stop.isDisabled(), true);
+  assert.equal(await page.locator("#control-heading").count(), 0);
   await page.evaluate(() => window.fixture.setGraph("graph"));
   await refresh();
   await root.click();

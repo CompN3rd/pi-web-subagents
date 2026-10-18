@@ -129,6 +129,8 @@ test("panel untrusted output stays in escaped Lit value slots, never markup", ()
 test("panel template has accessible labels, errors, receipts and full operation surfaces", () => {
   const panel = new TestPanel();
   panel.controller.state.error = "missing extension";
+  panel.controller.state.status = snapshot() as StatusData;
+  (panel as unknown as { selected: string }).selected = "run-1";
   const result = parts(panel.template());
   for (const expected of [
     "Subagents supervision",
@@ -153,6 +155,20 @@ test("panel template has accessible labels, errors, receipts and full operation 
     !result.markup.includes('role="tree"'),
     "native list semantics instead of incomplete tree keyboard widget",
   );
+});
+test("run controls require a current root and use its escaped label", () => {
+  const panel = new TestPanel();
+  assert.ok(!parts(panel.template()).markup.includes('id="control-heading"'));
+  panel.controller.state.status = snapshot() as StatusData;
+  const root = panel.controller.state.status.asyncSnapshot!.runs[0]!;
+  root.label = "<img src=x> Example run";
+  (panel as unknown as { selected: string }).selected = root.id;
+  const content = parts(panel.template());
+  assert.match(content.markup, /Details & controls/);
+  assert.ok(content.text.includes(root.label));
+  assert.ok(!content.markup.includes(root.label));
+  panel.controller.state.status.asyncSnapshot!.runs = [];
+  assert.ok(!parts(panel.template()).markup.includes('id="control-heading"'));
 });
 test("panel timestamps are explicit cached snapshots and unresolved cost is a lower bound", () => {
   const panel = new TestPanel();
