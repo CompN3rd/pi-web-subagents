@@ -87,6 +87,17 @@ test("panel overview reports omitted/unavailable projections; only top-level IDs
   assert.equal((tree.markup.match(/<button/g) ?? []).length, 1);
   assert.ok(!tree.text.includes("opaque-not-a-run"));
 });
+test("overview combines the graph and collapsed unlinked activity in one section", () => {
+  const controller = new SubagentsController(() => {});
+  controller.state.status = snapshot() as StatusData;
+  const content = parts(overview(controller.state, () => {}, ""));
+  assert.equal((content.markup.match(/<section\b/g) ?? []).length, 1);
+  assert.match(content.markup, /Agents & runs/);
+  assert.match(content.markup, /<details class="unlinked-agents">/);
+  assert.match(content.markup, /Further reported agents/);
+  assert.match(content.markup, /fleet entries omitted/);
+  assert.match(content.markup, /Bounded snapshot/);
+});
 test("panel does not present zero or missing capacity as a finite zero-slot limit", () => {
   const controller = new SubagentsController(() => {});
   controller.state.status = snapshot(true) as StatusData;
@@ -413,7 +424,7 @@ test("graph disclosure counts all nodes, defaults closed above eight and keeps w
   const content = parts(overview(controller.state, () => {}, ""));
   assert.match(content.markup, /aria-describedby="graph-description"/);
   assert.match(content.markup, /not execution order/);
-  assert.match(content.markup, /relationship unavailable/);
+  assert.match(content.markup, /Fleet entries have no reported run relationship/);
   assert.match(content.markup, /fleet entries omitted/);
   assert.match(content.markup, /Bounded snapshot/);
   assert.ok(content.text.includes("byte limit exceeded"));

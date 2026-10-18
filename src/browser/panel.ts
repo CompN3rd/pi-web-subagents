@@ -102,9 +102,9 @@ export function overview(
 ): TemplateResult {
   const fleet = state.status?.fleet;
   const snapshot = state.status?.asyncSnapshot;
-  return html`<section aria-labelledby="fleet-heading">
-      <h2 id="fleet-heading">
-        Fleet
+  return html`<section aria-labelledby="runs-heading" aria-describedby="graph-description">
+      <h2 id="runs-heading" tabindex="-1">
+        Agents & runs
         <span class="pill"
           >${fleet ? `${fleet.totalActive} reported active` : "unavailable"}</span
         >
@@ -130,9 +130,6 @@ export function overview(
         : html`<p>
             Fleet projection unavailable. This is not an empty-fleet result.
           </p>`}
-    </section>
-    <section aria-labelledby="runs-heading" aria-describedby="graph-description">
-      <h2 id="runs-heading" tabindex="-1">Async run graph</h2>
       <p id="graph-description" class="meta">
         Connections show reported async nesting, not execution order. Nested
         steps are display-only; no inferred child indices. Branches can be
@@ -160,9 +157,8 @@ export function overview(
             Async run projection unavailable. Controls require an authoritative
             top-level run.
           </p>`}
-    </section>
-    <section aria-labelledby="unlinked-heading">
-      <h2 id="unlinked-heading">Fleet activity — relationship unavailable</h2>
+      <details class="unlinked-agents">
+        <summary>Further reported agents${fleet ? ` · ${fleet.entries.length} visible` : " · unavailable"}</summary>
       <p class="meta">
         Fleet entries have no reported run relationship and are display-only.
         No connections are inferred.
@@ -189,6 +185,7 @@ export function overview(
               ? html`<p>No visible fleet entries in this snapshot.</p>`
               : nothing}`
         : html`<p>Fleet projection unavailable.</p>`}
+      </details>
       ${state.status?.text
         ? html`<details>
             <summary>Status summary</summary>

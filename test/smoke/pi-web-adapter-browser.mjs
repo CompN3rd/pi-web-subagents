@@ -152,6 +152,11 @@ try {
   await page.getByRole("button", { name: /Connected root/ }).waitFor();
   await refresh();
   const graph = page.locator('section[aria-labelledby="runs-heading"]');
+  const additionalAgents = graph.locator("details.unlinked-agents");
+  assert.equal(await additionalAgents.getAttribute("open"), null);
+  await additionalAgents.locator(":scope > summary").click();
+  assert.equal(await additionalAgents.locator(".fleet li").count(), 1);
+  await additionalAgents.locator(":scope > summary").click();
   const connected = page.locator(".graph-root").filter({ has: page.getByRole("button", { name: /Connected root/ }) });
   const root = connected.locator("button.run");
   const branch = connected.locator(":scope > details.branch-disclosure");
@@ -260,7 +265,9 @@ try {
   await page.evaluate(() => window.fixture.setGraph("empty"));
   await refresh();
   await page.getByText("No async runs in this snapshot.", { exact: true }).waitFor();
+  await additionalAgents.locator(":scope > summary").click();
   await page.getByText("No visible fleet entries in this snapshot.", { exact: true }).waitFor();
+  await additionalAgents.locator(":scope > summary").click();
   await page.evaluate(() => window.fixture.setGraph("unavailable"));
   await refresh();
   await page.getByText("Controls require an authoritative", { exact: false }).waitFor();
