@@ -95,4 +95,4 @@ jobs:
           TARBALL: ${{ needs.build.outputs.filename }}
         run: |
           test -z "${NODE_AUTH_TOKEN:-}${NPM_TOKEN:-}"
-          npm publish "adapter-artifact/$TARBALL" --access public --provenance --ignore-scripts
+          npm publish "./adapter-artifact/$TARBALL" --access public --provenance --ignore-scripts
