@@ -3,7 +3,6 @@
 // PI_WEB_SMOKE_PLAYWRIGHT_ROOT to that package and optionally
 // PI_WEB_SMOKE_BROWSER_EXECUTABLE to an installed browser executable.
 import assert from "node:assert/strict";
-import { createServer } from "node:http";
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -35,22 +34,10 @@ await build({
   format: "esm",
   platform: "browser",
 });
-const server = createServer(async (request, response) => {
-  if (request.url === "/fixture.js") {
-    response.setHeader("content-type", "text/javascript");
-    response.end(await readFile(join(artifacts, "fixture.js")));
-  } else if (request.url === "/") {
-    response.setHeader("content-type", "text/html");
-    response.end(
-      '<!doctype html><meta charset="utf-8"><title>Isolated Subagents Acceptance</title><style>body{margin:24px;background:#151820;color:#e4e8ee;font:15px system-ui}body>div{max-width:980px;margin:auto}</style><script type="module" src="/fixture.js"></script>',
-    );
-  } else {
-    response.statusCode = 404;
-    response.end();
-  }
-});
-await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
-const url = `http://127.0.0.1:${server.address().port}`;
+const fixtureScript = await readFile(join(artifacts, "fixture.js"));
+// Loopback is a trustworthy context in Chromium, so use an intercepted HTTP origin.
+// Every request is fulfilled locally or aborted; no DNS or live host is contacted.
+const url = "http://adapter-diagnostic.invalid";
 let browser;
 try {
   browser = await chromium.launch({
@@ -61,16 +48,32 @@ try {
   });
   const context = await browser.newContext({
     viewport: { width: 1150, height: 1000 },
+    serviceWorkers: "block",
   });
   const page = await context.newPage();
   const errors = [];
   page.on("pageerror", (error) => errors.push(String(error)));
-  await page.route("**/*", (route) =>
-    new URL(route.request().url()).origin === url
-      ? route.continue()
-      : route.abort(),
-  );
+  await context.route("**/*", (route) => {
+    if (route.request().url() === `${url}/fixture.js`)
+      return route.fulfill({ contentType: "text/javascript", body: fixtureScript });
+    if (route.request().url() === `${url}/`)
+      return route.fulfill({
+        contentType: "text/html",
+        body: '<!doctype html><meta charset="utf-8"><title>Isolated Subagents Acceptance</title><style>body{margin:24px;background:#151820;color:#e4e8ee;font:15px system-ui}body>div{max-width:980px;margin:auto}</style><script type="module" src="/fixture.js"></script>',
+      });
+    return route.abort();
+  });
   await page.goto(url);
+  const browserCrypto = await page.evaluate(() => ({
+    secureContext: isSecureContext,
+    randomUUID: typeof crypto.randomUUID,
+    getRandomValues: typeof crypto.getRandomValues,
+  }));
+  assert.deepEqual(browserCrypto, {
+    secureContext: false,
+    randomUUID: "undefined",
+    getRandomValues: "function",
+  });
   await page.getByRole("heading", { name: "Subagents", exact: true }).waitFor();
   await page.waitForFunction(() =>
     window.fixture.calls.some((call) => call.method === "status"),
@@ -111,6 +114,7 @@ try {
   await page.waitForFunction(() =>
     window.fixture.calls.some((call) => call.method === "stop"),
   );
+  await page.getByText("stop · accepted", { exact: true }).waitFor();
   await page
     .getByText("Not terminal proof", { exact: false })
     .first()
@@ -157,13 +161,27 @@ try {
   assert.equal(await page.evaluate(() => window.fixture.calls.length), calls);
   assert.equal(await page.evaluate(() => window.fixture.subscribed), false);
   assert.deepEqual(errors, []);
+  assert.ok(
+    (await page.evaluate(() => window.fixture.actions)).includes("Open Subagents"),
+  );
+  const requestIds = await page.evaluate(() =>
+    window.fixture.calls.map((call) => call.requestId),
+  );
+  const uuidV4 =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+  for (const id of requestIds) assert.match(id, uuidV4);
+  assert.equal(new Set(requestIds).size, requestIds.length);
   const report = {
     result: "passed",
     browser: await browser.version(),
     artifacts,
+    browserCrypto,
+    requestIds,
     scope:
       "Real browser and built adapter with fake public host/peer; NOT live PI WEB daemon",
     checks: [
+      "non-secure HTTP activation contributes Open Subagents",
+      "real controller request IDs are distinct UUID v4 values; replies correlate",
       "mount handshake/status",
       "escaped output",
       "stop requires confirmation",
@@ -181,5 +199,4 @@ try {
   console.log(JSON.stringify(report));
 } finally {
   await browser?.close();
-  await new Promise((resolve) => server.close(resolve));
 }

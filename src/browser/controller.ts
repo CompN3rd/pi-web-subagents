@@ -16,6 +16,7 @@ import {
   type ToolData,
   type ToolDetails,
 } from "../protocol.js";
+import { browserUuid } from "./uuid.js";
 
 export interface Scope {
   machineId: string;
@@ -122,7 +123,7 @@ export class SubagentsController {
   constructor(
     private readonly changed: () => void,
     private readonly time: Clock = clock,
-    private readonly uuid: () => string = () => crypto.randomUUID(),
+    private readonly uuid: () => string = browserUuid,
   ) {}
   get currentReceipts(): Receipt[] {
     return this.receipts.filter(

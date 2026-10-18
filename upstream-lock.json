@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "adapter": {
     "name": "@compn3rd/pi-web-subagents",
-    "version": "0.79.0"
+    "version": "0.79.1"
   },
   "upstream": {
     "name": "pi-subagents",

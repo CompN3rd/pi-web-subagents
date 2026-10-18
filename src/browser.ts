@@ -1,6 +1,7 @@
 import type { PiWebPlugin } from "@jmfederico/pi-web/plugin-api";
 import { html as elementHtml, unsafeStatic } from "lit/static-html.js";
 import { SubagentsPanel } from "./browser/panel.js";
+import { browserUuid } from "./browser/uuid.js";
 
 const plugin = {
   apiVersion: 4,
@@ -8,7 +9,7 @@ const plugin = {
   activate({ runtimePluginId, selection, lifetimeSignal }) {
     // A revision/activation-local element cannot reuse a different federated package's constructor.
     // Only our generated tag enters static markup; all upstream/user text remains ordinary Lit values.
-    const name = `compn3rd-subagents-${crypto.randomUUID()}`;
+    const name = `compn3rd-subagents-${browserUuid()}`;
     const tag = unsafeStatic(name);
     customElements.define(name, class extends SubagentsPanel {});
     return {

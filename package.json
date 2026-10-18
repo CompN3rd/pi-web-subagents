@@ -1,6 +1,6 @@
 {
   "name": "@compn3rd/pi-web-subagents",
-  "version": "0.79.0",
+  "version": "0.79.1",
   "description": "Pi Web adapter for a separately installed pi-subagents RPC event bus",
   "type": "module",
   "license": "MIT",

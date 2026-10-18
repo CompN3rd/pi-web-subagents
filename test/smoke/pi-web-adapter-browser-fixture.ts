@@ -61,6 +61,7 @@ const result = plugin.activate({
 render(result.contributions.workspacePanels![0]!.render(context), container);
 Object.assign(window, {
   fixture: {
+    actions: result.contributions.actions!.map((action) => action.title),
     calls,
     chips,
     navigation,

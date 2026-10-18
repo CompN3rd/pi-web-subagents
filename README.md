@@ -6,10 +6,16 @@ the execution engine, or replace Pi Web's tracked subsessions.
 
 ## Release status
 
-**0.79.0 is an unpublished development candidate**, extracted into the standalone
+**0.79.1 is an unpublished development candidate**, extracted into the standalone
 [CompN3rd/pi-web-subagents repository](https://github.com/CompN3rd/pi-web-subagents).
 Publishing and upstream proposals are **disabled by default**. The execution
 engine is not bundled, forked, or patched by this package.
+
+Adapter-only fix in 0.79.1: activation and request IDs now fall back to secure
+`crypto.getRandomValues` UUIDs where non-secure HTTP origins lack
+`crypto.randomUUID`. This fixes the missing **Open Subagents** action in an
+isolated browser reproduction; it does not confirm any particular live URL.
+The separate engine mapping remains 0.79.0.
 
 Earlier browser, SDK lifecycle and isolated real-host evidence belongs to the
 reviewed nested adapter source in `pi-subagents` commit `468ddd3d` (imported here
@@ -144,8 +150,8 @@ npm run typecheck
 npm test
 npm run build
 npm run pack:release
-# Use the validated filename printed by pack:release (initially this path):
-npm run verify:release -- --tarball artifacts/compn3rd-pi-web-subagents-0.79.0.tgz
+# Use the validated filename printed by pack:release:
+npm run verify:release -- --tarball artifacts/compn3rd-pi-web-subagents-0.79.1.tgz
 ```
 
 The browser is bundled with its dependencies into `dist/browser/index.js`.
@@ -161,16 +167,17 @@ adapter test against the real host and engine.
 
 ## Validation boundaries
 
-The opt-in `test/smoke/pi-web-adapter-browser.mjs` harness is copied from the
-reviewed nested source; only standalone import paths changed. Build this adapter,
-set `PI_WEB_SMOKE_PLAYWRIGHT_ROOT` to a separately installed Playwright package
+The opt-in `test/smoke/pi-web-adapter-browser.mjs` harness derives from the
+reviewed nested source. Build this adapter, set `PI_WEB_SMOKE_PLAYWRIGHT_ROOT` to a separately installed Playwright package
 and optionally `PI_WEB_SMOKE_BROWSER_EXECUTABLE`, then run `npm run test:browser`.
 It writes artifacts to a new temporary directory and opens a fresh headless
-browser profile on an ephemeral loopback fixture server. It checks mounting,
-escaped output, stop confirmation/focus, scope reset, mobile geometry and unmount
-cleanup. Its host/peer is fake, **not a PI Web daemon**. The fixture TypeScript is
-transpiled by esbuild, not part of the production/typecheck inputs. Playwright is
-not installed or downloaded by CI or packaged with the adapter.
+browser profile on a non-secure HTTP fixture origin. All requests are intercepted
+and fulfilled locally or aborted; no live host is contacted. It checks activation
+and real controller UUIDs without native `randomUUID`, mounting, escaped output,
+stop confirmation/focus and correlated receipt, scope reset, mobile geometry and
+unmount cleanup. Its host/peer is fake, **not a PI Web daemon**. The fixture
+TypeScript is transpiled by esbuild, not part of the production/typecheck inputs.
+Playwright is not installed or downloaded by CI or packaged with the adapter.
 
 The SDK/engine smoke `test/smoke/pi-web-host-sdk.mjs` remains in the original
 `pi-subagents` repository; it is not copied here. Earlier evidence there used
