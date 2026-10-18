@@ -157,7 +157,7 @@ try {
   const branch = connected.locator(":scope > details.branch-disclosure");
   const branchSummary = branch.locator(":scope > summary");
   assert.equal(await graph.locator("button.run").count(), 4);
-  assert.equal(await graph.locator(".node-card").count(), 14);
+  assert.equal(await graph.locator(".node-card").count(), 16);
   assert.equal(await graph.locator(".graph-child button").count(), 0);
   assert.equal(await page.locator(".fleet button").count(), 0);
   assert.equal(await branch.getAttribute("open"), null);
@@ -193,11 +193,26 @@ try {
     assert.notEqual(await branch.getAttribute("open"), null);
   }
 
+  // Duplicate IDs are ambiguous presentations, never persistent card identities.
+  const duplicateA = graph.locator(".graph-root").filter({ has: page.getByRole("button", { name: "Duplicate A", exact: true }) });
+  const duplicateB = graph.locator(".graph-root").filter({ has: page.getByRole("button", { name: "Duplicate B", exact: true }) });
+  const duplicateBranch = (card) => card.locator(":scope > details.branch-disclosure");
+  await duplicateA.getByText("Activity details", { exact: true }).click();
+  await duplicateBranch(duplicateA).locator(":scope > summary").click();
+  assert.equal(await duplicateA.locator(".node-details[open]").count(), 1);
+  assert.equal(await duplicateB.locator(".node-details[open]").count(), 0);
+  assert.equal(await duplicateBranch(duplicateA).getAttribute("open"), null);
+  assert.notEqual(await duplicateBranch(duplicateB).getAttribute("open"), null);
+  await isolated.focus();
+
   // Keep focused controls/disclosure DOM through real polling and keyed reorder.
   const polls = await page.evaluate(() => window.fixture.calls.filter((call) => call.method === "status").length);
   await page.waitForFunction((count) => window.fixture.calls.filter((call) => call.method === "status").length > count, polls);
   assert.equal(await isolated.evaluate((element) => element.getRootNode().activeElement === element), true);
   assert.notEqual(await branch.getAttribute("open"), null);
+  assert.equal(await duplicateA.locator(".node-details[open]").count(), 1, "unchanged duplicate poll retains native state");
+  assert.equal(await duplicateBranch(duplicateA).getAttribute("open"), null);
+  const previousDuplicates = await graph.locator(".graph-root").filter({ has: page.getByRole("button", { name: /^Duplicate [AB]$/ }) }).elementHandles();
   await page.evaluate(() => window.fixture.reorder());
   // Click refresh would intentionally change focus; invoke the native button without focusing it.
   await page.getByRole("button", { name: "Refresh status", exact: true }).evaluate((element) => element.click());
@@ -209,6 +224,14 @@ try {
   assert.equal(await isolated.getAttribute("aria-pressed"), "true");
   assert.notEqual(await branch.getAttribute("open"), null);
   assert.equal(await connected.locator(".node-details[open]").count(), 1);
+  for (const previous of previousDuplicates) {
+    assert.equal(await previous.evaluate((element) => element.isConnected), false, "ambiguous duplicate cards remount on reorder");
+    await previous.dispose();
+  }
+  for (const card of [duplicateA, duplicateB]) {
+    assert.equal(await card.locator(".node-details[open]").count(), 0, "activity state must not migrate between duplicate IDs");
+    assert.notEqual(await duplicateBranch(card).getAttribute("open"), null, "branch state resets to its default, not another duplicate's choice");
+  }
   // Disappearance only transfers graph focus when it was in the removed root.
   await page.evaluate(() => window.fixture.removeRoot("run-2"));
   await page.getByRole("button", { name: "Refresh status", exact: true }).evaluate((element) => element.click());
@@ -290,6 +313,32 @@ try {
   assert.equal(await branch.getAttribute("open"), null);
   await page.keyboard.press("Space");
   assert.notEqual(await branch.getAttribute("open"), null);
+  const mobileVisibility = [];
+  const recordMobileVisibility = async (phase) => {
+    mobileVisibility.push(await stop.evaluate((element, phase) => {
+      const panel = element.getRootNode().host;
+      const rect = panel.getBoundingClientRect();
+      return {
+        phase,
+        stopDisabled: element.disabled,
+        panelIntersectsViewport: rect.bottom > 0 && rect.top < innerHeight && rect.right > 0 && rect.left < innerWidth,
+        panelTop: rect.top,
+        panelBottom: rect.bottom,
+        scrollY,
+        viewportHeight: innerHeight,
+      };
+    }, phase));
+    await writeFile(join(artifacts, "mobile-visibility.json"), JSON.stringify(mobileVisibility, null, 2));
+  };
+  await recordMobileVisibility("before-scroll");
+  // click() checks enabled before scrolling. Explicitly reveal the control first
+  // so IntersectionObserver can resume the real handshake after viewport changes.
+  await stop.scrollIntoViewIfNeeded();
+  await page.waitForFunction(() => {
+    const panel = document.querySelector("body>div").firstElementChild;
+    return [...panel.shadowRoot.querySelectorAll("button")].some((button) => button.textContent.trim() === "Stop run…" && !button.disabled);
+  });
+  await recordMobileVisibility("after-scroll-and-enabled");
   await stop.click();
   await page.locator(".confirmation").waitFor();
   await page.screenshot({ path: join(artifacts, "mobile-confirmation.png"), fullPage: true });
@@ -345,6 +394,7 @@ try {
     browser: await browser.version(),
     artifacts,
     browserCrypto,
+    mobileVisibility,
     requestIds,
     scope:
       "Real browser and built adapter with fake public host/peer; NOT live PI WEB daemon",
@@ -358,7 +408,9 @@ try {
       "scope clears drafts/confirmation",
       "native connected forest and unlinked fleet; duplicate IDs, hostile values, deepest ancestry",
       "keyboard selection/disclosure only; no graph mutation RPC",
-      "poll/reorder focus and disclosure retention; focused removal fallback",
+      "poll/reorder unique focus and disclosure retention; focused removal fallback",
+      "duplicate-ID activity and branch disclosures retain on unchanged polls and safely reset on reorder",
+      "mobile Stop explicitly scrolled into view before capability-enabled wait/click",
       "scope resets selection/disclosures; stale/empty/unavailable warnings",
       "root-only stop/interrupt/steer; uncertain spawn does not retry",
       "375px dark/light/forced-colors screenshots and containment",

@@ -355,9 +355,9 @@ test("graph forest preserves ancestry, duplicate occurrences and root-only callb
   const tree = runTree(roots, (id) => selected.push(id), "run-2");
   const content = parts(tree);
   assert.equal(descendantCount(roots[0]!), 10);
-  assert.equal((content.markup.match(/<article/g) ?? []).length, 14);
+  assert.equal((content.markup.match(/<article/g) ?? []).length, 16);
   assert.equal((content.markup.match(/<button/g) ?? []).length, roots.length);
-  assert.equal((content.markup.match(/<ul/g) ?? []).length, 4);
+  assert.equal((content.markup.match(/<ul/g) ?? []).length, 6);
   assert.ok(content.text.includes("grandchild"));
   assert.ok(content.text.includes("paused"));
   assert.ok(content.markup.includes("Selected"));
@@ -374,6 +374,37 @@ test("graph forest preserves ancestry, duplicate occurrences and root-only callb
   assert.ok(!selected.includes("grandchild"));
   const keys = graphOccurrences(roots).map((entry) => entry.key);
   assert.equal(graphOccurrences([...roots].reverse()).find((entry) => entry.node.id === "run-2")!.key, keys[1]);
+});
+
+test("graphOccurrences resets ambiguous duplicate presentations on reorder or content changes only", () => {
+  const roots = graphSnapshot().asyncSnapshot!.runs;
+  const keys = (nodes: AsyncNode[]) => graphOccurrences(nodes).map((entry) => entry.key);
+  const original = keys(roots);
+  assert.deepEqual(keys(structuredClone(roots)), original, "unchanged polls retain keys");
+  assert.equal(original[0], JSON.stringify(["run-1", 0]), "unique ID key is unchanged");
+  const reversed = graphOccurrences([...roots].reverse());
+  for (const entry of reversed) {
+    const previous = original[roots.findIndex((node) => node === entry.node)];
+    if (entry.node.id === "duplicate") {
+      assert.ok(!original.includes(entry.key), "no duplicate DOM is reused after reorder");
+    } else assert.equal(entry.key, previous);
+  }
+  for (const change of [
+    (node: AsyncNode) => { node.activity!.text = "updated activity"; },
+    (node: AsyncNode) => { node.children![0]!.label = "updated branch"; },
+  ]) {
+    const changed = structuredClone(roots);
+    change(changed[2]!);
+    const updated = keys(changed);
+    assert.deepEqual(updated.slice(0, 2), original.slice(0, 2));
+    assert.ok(updated.slice(2).every((key) => !original.includes(key)), "reset whole ambiguous group");
+  }
+  const unique = structuredClone(roots[0]!);
+  unique.activity!.turnCount = 4;
+  unique.children!.reverse();
+  assert.equal(keys([unique])[0], original[0], "unique content changes do not remount");
+  const identical = [roots[2]!, structuredClone(roots[2]!)];
+  assert.equal(new Set(keys(identical)).size, 2, "identical duplicate occurrences still have distinct keys");
 });
 
 test("graph disclosure counts all nodes, defaults closed above eight and keeps warnings outside", () => {

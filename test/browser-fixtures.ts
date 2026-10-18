@@ -135,8 +135,19 @@ export function graphSnapshot(): StatusData {
       })),
     },
     { id: "run-2", label: "Isolated root", kind: "subagent", state: "queued" },
-    { id: "duplicate", label: "Duplicate A", kind: "workflow", state: "partial" },
-    { id: "duplicate", label: "Duplicate B", kind: "workflow", state: "stopped" },
+    ...(["A", "B"] as const).map((name) => ({
+      id: "duplicate",
+      label: `Duplicate ${name}`,
+      kind: "workflow" as const,
+      state: name === "A" ? "partial" as const : "stopped" as const,
+      activity: { text: `Activity ${name}` },
+      children: [{
+        id: "duplicate-child",
+        label: `Branch ${name}`,
+        kind: "step" as const,
+        state: "complete" as const,
+      }],
+    })),
   ];
   return data;
 }
