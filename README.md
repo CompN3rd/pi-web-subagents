@@ -120,6 +120,41 @@ socket or host/port, and web port. A child process inherits the live instance's
 `PI_WEB_*` environment; do not start a second instance with those inherited
 addresses or data directory.
 
+### Navigation and pinning
+
+Subagents uses Pi Web's `workspacePanels` contribution, the same supported
+navigation surface as Automations, not a separate global header button. Its
+parent-and-children icon identifies the panel; its sort order is 26, immediately
+after Automations' 25 when both are available and no other tabs sort between them.
+The local panel ID remains `subagents`; **Open Subagents** uses the host's
+runtime-qualified ID, including on remote machines.
+
+To make it easy to reach:
+
+1. Select the intended machine, project and workspace. Workspace panels are not
+   available without a selected workspace.
+2. Open the host's navigation, find **Subagents** among the available tabs, and
+   use its **Pin** control to include it in the navigation row. An existing
+   explicit pin list can omit a newly installed panel.
+3. Select **Subagents**, or run **Open Subagents** from the action palette.
+   Select a ready, non-archived parent conversation in that same workspace to
+   use session-backed controls; the exact paired server entry must be active.
+
+Pin preferences and responsive layout belong to the host. This plugin cannot
+force a permanently visible top-row button, override unpinning, guarantee
+adjacency at every screen size, or add an independent global top-bar surface:
+browser API v4 has no public contribution or pinning API for that. It does not
+modify host DOM, private routes, or stored navigation preferences.
+
+If Subagents is absent from available navigation destinations entirely, check
+**Settings → Pi Web plugins** on the selected machine for enablement, activation
+or paired-version/restart status, and check browser errors and built assets
+before treating it as a pinning issue. Browser-source changes require rebuilding
+and reloading; package installation/update can also require the safe target-daemon
+restart described above. Unit tests and the browser fixture do not certify live
+host navigation, pin persistence, or responsive placement; those require separate
+isolated real-host acceptance. No live browser preferences were inspected here.
+
 ### Runtime discovery is a separate fix
 
 The browser/server adapter cannot select the SDK used by the already-installed
