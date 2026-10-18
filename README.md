@@ -6,10 +6,26 @@ the execution engine, or replace Pi Web's tracked subsessions.
 
 ## Release status
 
-**0.79.1 is an unpublished development candidate**, extracted into the standalone
+**0.79.2 is a prepared release candidate**, maintained in the standalone
 [CompN3rd/pi-web-subagents repository](https://github.com/CompN3rd/pi-web-subagents).
-Publishing and upstream proposals are **disabled by default**. The execution
-engine is not bundled, forked, or patched by this package.
+At preparation time npm lists 0.79.1 as `latest`; preparation does not publish
+0.79.2. Publishing and upstream proposals are **disabled by default in workflow
+configuration** and require explicit owner setup; live repository settings are
+not attested here. The execution engine is not bundled, forked, or patched.
+
+Adapter-only changes in 0.79.2:
+
+- Navigation icon and ordering alongside Automations, with host-managed pinning.
+- Connected async run cards using reported nesting, with textual state, native
+  disclosures, responsive layout and keyboard/focus preservation.
+- One **Agents & runs** overview; unlinked fleet activity is collapsed under
+  **Further reported agents**, without inferring relationships or double-counting.
+- Contextual **Details & controls** appears only for a selected current run;
+  run changes reset message drafts and show only that run's loaded transcript.
+- Safe disclosure resets for ambiguous duplicate-ID presentations.
+
+See [CHANGELOG.md](https://github.com/CompN3rd/pi-web-subagents/blob/main/CHANGELOG.md) in the source repository for release notes and
+validation limits.
 
 Adapter-only fix in 0.79.1: activation and request IDs now fall back to secure
 `crypto.getRandomValues` UUIDs where non-secure HTTP origins lack
@@ -186,7 +202,7 @@ npm test
 npm run build
 npm run pack:release
 # Use the validated filename printed by pack:release:
-npm run verify:release -- --tarball artifacts/compn3rd-pi-web-subagents-0.79.1.tgz
+npm run verify:release -- --tarball artifacts/compn3rd-pi-web-subagents-0.79.2.tgz
 ```
 
 The browser is bundled with its dependencies into `dist/browser/index.js`.
@@ -302,10 +318,11 @@ configures none of the GitHub/npm controls:
    Windows/Linux CI and disposition of the separate upstream root regressions.
    Registry integrity and unit fixtures alone are not release acceptance.
 3. Establish npm scope/package ownership and first-publication bootstrap through
-   an owner-approved npm path. This package is not yet published and available
-   npm publishing authentication has **not** been established. Trusted publisher
-   configuration may require initial package creation; do not add a token fallback
-   to this workflow or put tokens in source, artifacts, issues or chat.
+   an owner-approved npm path. npm already lists releases through 0.79.1; that
+   does not establish this checkout's current publishing authorization or attest
+   the live trusted-publisher configuration. Verify those controls before release;
+   do not add a token fallback to this workflow or put tokens in source, artifacts,
+   issues or chat.
 4. Bind npm trusted publishing to GitHub owner `CompN3rd`, repository
    `pi-web-subagents`, workflow `adapter-release.yml`, and environment
    `adapter-release`. The pinned Node 24/npm toolchain supports OIDC. Configure
