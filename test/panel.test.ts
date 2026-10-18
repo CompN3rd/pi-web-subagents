@@ -10,11 +10,34 @@ import {
   stageParentMessage,
 } from "../src/browser/panel.ts";
 import { SubagentsController } from "../src/browser/controller.ts";
-import type { AsyncNode, StatusData } from "../src/protocol.ts";
-import { panelContext, snapshot, tick } from "./browser-fixtures.ts";
+import { parseRpcReply, type AsyncNode, type StatusData } from "../src/protocol.ts";
+import { graphHostile, graphSnapshot, panelContext, snapshot, tick } from "./browser-fixtures.ts";
+import { descendantCount, graphOccurrences } from "../src/browser/graph.ts";
+import { repeat } from "lit/directives/repeat.js";
+import { keyed } from "lit/directives/keyed.js";
+import { guard } from "lit/directives/guard.js";
+
+const directiveType = (value: unknown) => (value as { _$litDirective$: unknown })._$litDirective$;
+// Expand only the known directives for template inspection, not DOM assertions.
+function directiveValue(value: unknown): unknown {
+  if (!value || typeof value !== "object" || !("_$litDirective$" in value)) return value;
+  const directive = value as { _$litDirective$: unknown; values: unknown[] };
+  if (directive._$litDirective$ === directiveType(repeat([], () => ""))) {
+    const items = directive.values[0] as Iterable<unknown>;
+    const template = directive.values[2] as (item: unknown, index: number) => unknown;
+    return Array.from(items, template);
+  }
+  if (directive._$litDirective$ === directiveType(guard([], () => ""))) {
+    return (directive.values[1] as () => unknown)();
+  }
+  if (directive._$litDirective$ === directiveType(keyed("", ""))) return directive.values[1];
+  throw new Error("Unexpected directive in template test");
+}
 
 // Inspect Lit's template contract without claiming DOM/SSR/browser execution.
 function parts(value: unknown): { markup: string; text: string } {
+  const expanded = directiveValue(value);
+  if (expanded !== value) return parts(expanded);
   if (Array.isArray(value))
     return value
       .map(parts)
@@ -80,7 +103,8 @@ test("panel does not present zero or missing capacity as a finite zero-slot limi
 test("panel untrusted output stays in escaped Lit value slots, never markup", () => {
   const malicious = '<img src=x onerror="alert(1)"><script>evil()</script>';
   const node: AsyncNode = {
-    id: "run-1",
+    id: malicious,
+    model: malicious,
     label: malicious,
     kind: "subagent",
     state: "running",
@@ -294,4 +318,112 @@ test("supervisor helper rejects stale composer context and archived selection", 
     /ready exact/,
   );
   assert.equal(calls, 0);
+});
+
+function templates(value: unknown): TemplateResult[] {
+  const expanded = directiveValue(value);
+  if (expanded !== value) return templates(expanded);
+  if (Array.isArray(value)) return value.flatMap(templates);
+  if (value && typeof value === "object" && "strings" in value && "values" in value) {
+    const template = value as TemplateResult;
+    return [template, ...templates(template.values)];
+  }
+  return [];
+}
+
+test("graph fixtures are parser-valid, and a large accepted forest loses no nodes", () => {
+  const data = graphSnapshot();
+  const identity = { requestId: "graph-fixture", method: "status" as const, sessionId: "session-1" };
+  const validate = () => parseRpcReply({ version: 1, requestId: identity.requestId, method: identity.method, success: true, data }, identity);
+  assert.doesNotThrow(validate);
+  data.asyncSnapshot!.runs = Array.from({ length: 20 }, (_, root) => ({
+    id: `root-${root}`, label: "Root", kind: "workflow", state: "running",
+    children: Array.from({ length: 8 }, (_, child) => ({
+      id: String(child), label: "Child", kind: "step", state: "complete",
+    })),
+  }));
+  assert.doesNotThrow(validate);
+  const content = parts(runTree(data.asyncSnapshot!.runs, () => {}));
+  assert.equal((content.markup.match(/<article/g) ?? []).length, 180);
+  assert.equal((content.markup.match(/<button/g) ?? []).length, 20);
+});
+
+test("graph forest preserves ancestry, duplicate occurrences and root-only callback targets", () => {
+  const data = graphSnapshot();
+  const roots = data.asyncSnapshot!.runs;
+  const selected: string[] = [];
+  const tree = runTree(roots, (id) => selected.push(id), "run-2");
+  const content = parts(tree);
+  assert.equal(descendantCount(roots[0]!), 10);
+  assert.equal((content.markup.match(/<article/g) ?? []).length, 14);
+  assert.equal((content.markup.match(/<button/g) ?? []).length, roots.length);
+  assert.equal((content.markup.match(/<ul/g) ?? []).length, 4);
+  assert.ok(content.text.includes("grandchild"));
+  assert.ok(content.text.includes("paused"));
+  assert.ok(content.markup.includes("Selected"));
+  assert.doesNotMatch(content.markup, /role="(?:tree|treeitem)"|<canvas|unsafeHTML/);
+  assert.equal(new Set(graphOccurrences(roots).map((entry) => entry.key)).size, roots.length);
+  assert.equal(new Set(graphOccurrences(roots[0]!.children!).map((entry) => entry.key)).size, 8);
+  for (const template of templates(tree)) {
+    template.strings.forEach((text, index) => {
+      if (text.includes("@click=")) (template.values[index] as () => void)();
+    });
+  }
+  assert.deepEqual(selected, roots.map((root) => root.id));
+  assert.ok(!selected.includes("step:99"));
+  assert.ok(!selected.includes("grandchild"));
+  const keys = graphOccurrences(roots).map((entry) => entry.key);
+  assert.equal(graphOccurrences([...roots].reverse()).find((entry) => entry.node.id === "run-2")!.key, keys[1]);
+});
+
+test("graph disclosure counts all nodes, defaults closed above eight and keeps warnings outside", () => {
+  const controller = new SubagentsController(() => {});
+  controller.state.status = graphSnapshot();
+  const content = parts(overview(controller.state, () => {}, ""));
+  assert.match(content.markup, /aria-describedby="graph-description"/);
+  assert.match(content.markup, /not execution order/);
+  assert.match(content.markup, /relationship unavailable/);
+  assert.match(content.markup, /fleet entries omitted/);
+  assert.match(content.markup, /Bounded snapshot/);
+  assert.ok(content.text.includes("byte limit exceeded"));
+  assert.ok(content.text.includes("10"));
+  assert.ok(content.text.includes(graphHostile));
+  assert.ok(!content.markup.includes(graphHostile));
+  assert.ok(content.text.includes("shared-model"));
+  assert.ok(content.text.includes("reviewer"));
+  assert.ok(content.text.includes("high"));
+  assert.match(content.markup, /Host step details/);
+  for (const count of [8, 9]) {
+    const root: AsyncNode = {
+      id: "root", label: "root", kind: "workflow", state: "running",
+      children: [{ id: "child", label: "child", kind: "step", state: "running",
+        children: Array.from({ length: count - 1 }, (_, i) => ({
+          id: String(i), label: String(i), kind: "step", state: "complete",
+        })),
+      }],
+    };
+    const disclosure = templates(runTree([root], () => {})).find((template) => template.strings[0]!.includes('class="branch-disclosure"'))!;
+    assert.equal(directiveValue(disclosure.values[0]), count <= 8);
+    assert.equal(disclosure.values[1], count);
+    assert.equal((parts(runTree([root], () => {})).markup.match(/<article/g) ?? []).length, count + 1);
+  }
+});
+
+test("graph preserves unknown versus empty projections, fallbacks and warning-free present snapshots", () => {
+  const controller = new SubagentsController(() => {});
+  const unavailable = parts(overview(controller.state, () => {}, ""));
+  assert.doesNotMatch(unavailable.markup, /No async runs in this snapshot/);
+  controller.state.status = snapshot() as StatusData;
+  let content = parts(overview(controller.state, () => {}, ""));
+  assert.ok(content.text.includes("model unavailable"));
+  assert.ok(content.text.includes("effort unavailable"));
+  assert.ok(content.text.includes("No goal provided"));
+  controller.state.status.fleet!.entries = [];
+  controller.state.status.fleet!.omitted = 0;
+  controller.state.status.asyncSnapshot!.runs = [];
+  controller.state.status.asyncSnapshot!.omitted = { runs: 0, children: 0, byteLimitExceeded: false };
+  content = parts(overview(controller.state, () => {}, ""));
+  assert.match(content.markup, /No visible fleet entries/);
+  assert.match(content.markup, /No async runs in this snapshot/);
+  assert.doesNotMatch(content.markup, /projection unavailable|Bounded snapshot|fleet entries omitted/);
 });

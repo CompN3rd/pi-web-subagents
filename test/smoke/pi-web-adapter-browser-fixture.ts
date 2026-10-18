@@ -4,11 +4,13 @@ import {
   panelContext,
   reply,
   snapshot,
+  graphSnapshot,
 } from "../../test/browser-fixtures.ts";
 const calls: any[] = [];
 let listener: any;
 let fail = false;
 let uncertain = false;
+let status = snapshot(true) as ReturnType<typeof graphSnapshot>;
 const context = panelContext(async (input) => {
   calls.push(input);
   if (fail) throw new Error("fixture disconnected");
@@ -25,7 +27,7 @@ const context = panelContext(async (input) => {
     input,
     input.method === "status"
       ? {
-          ...snapshot(true),
+          ...status,
           text: '<img src=x onerror="window.evil=true"> literal transcript',
         }
       : undefined,
@@ -66,6 +68,27 @@ Object.assign(window, {
     chips,
     navigation,
     context,
+    setGraph(mode: "graph" | "empty" | "unavailable") {
+      status = mode === "unavailable" ? {} : graphSnapshot();
+      if (mode === "empty") {
+        status.fleet!.entries = [];
+        status.asyncSnapshot!.runs = [];
+      }
+    },
+    reorder() {
+      status.asyncSnapshot!.runs.reverse();
+    },
+    setBranchDepth(deep: boolean) {
+      const root = status.asyncSnapshot!.runs.find((node) => node.id === "run-1")!;
+      root.children![0]!.children = deep
+        ? graphSnapshot().asyncSnapshot!.runs[0]!.children![0]!.children
+        : [];
+    },
+    removeRoot(id: string) {
+      status.asyncSnapshot!.runs = status.asyncSnapshot!.runs.filter(
+        (root) => root.id !== id,
+      );
+    },
     setFailure(value: boolean) {
       fail = value;
     },

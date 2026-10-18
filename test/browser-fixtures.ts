@@ -3,6 +3,7 @@ import {
   MANAGEMENT_ACTIONS,
   RPC_METHODS,
   type RpcInput,
+  type StatusData,
 } from "../src/protocol.ts";
 import type { Clock } from "../src/browser/controller.ts";
 export const tick = () => new Promise<void>((resolve) => setImmediate(resolve));
@@ -83,6 +84,62 @@ export const snapshot = (active = false) => ({
     ],
   },
 });
+export const graphHostile = '<img src=x onerror="window.evil=true">';
+/** Separate bounded graph fixture: deepest accepted ancestry and repeated IDs/labels. */
+export function graphSnapshot(): StatusData {
+  const data = snapshot(true) as StatusData;
+  data.fleet!.entries[0] = {
+    ...data.fleet!.entries[0]!,
+    key: "step:99",
+    agent: "Repeated label",
+    role: "reviewer",
+    model: "shared-model",
+    effort: "high",
+    goal: graphHostile + "x".repeat(400),
+  };
+  data.asyncSnapshot!.runs = [
+    {
+      id: "run-1",
+      label: "Connected root " + graphHostile,
+      kind: "workflow",
+      state: "running",
+      model: "shared-model",
+      activity: { currentTool: graphHostile, turnCount: 3 },
+      children: Array.from({ length: 8 }, (_, i) => ({
+        id: i < 2 ? "step:99" : `step:${i}`,
+        label: "Repeated label",
+        kind: "step" as const,
+        state: "complete" as const,
+        ...(i === 0
+          ? {
+              children: [
+                {
+                  id: "grandchild",
+                  label: "Grandchild",
+                  kind: "host-step" as const,
+                  state: "failed" as const,
+                  hostStep: { detail: graphHostile, stale: true },
+                  children: [
+                    {
+                      id: "deep-" + "x".repeat(150),
+                      label: "Deepest " + "x".repeat(150),
+                      kind: "step" as const,
+                      state: "paused" as const,
+                      model: graphHostile,
+                    },
+                  ],
+                },
+              ],
+            }
+          : {}),
+      })),
+    },
+    { id: "run-2", label: "Isolated root", kind: "subagent", state: "queued" },
+    { id: "duplicate", label: "Duplicate A", kind: "workflow", state: "partial" },
+    { id: "duplicate", label: "Duplicate B", kind: "workflow", state: "stopped" },
+  ];
+  return data;
+}
 export function reply(input: RpcInput, data?: unknown): unknown {
   data ??=
     input.method === "ping"

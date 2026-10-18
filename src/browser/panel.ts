@@ -6,6 +6,10 @@ import {
   type PropertyValues,
   type TemplateResult,
 } from "lit";
+import { repeat } from "lit/directives/repeat.js";
+import { keyed } from "lit/directives/keyed.js";
+import { guard } from "lit/directives/guard.js";
+import { descendantCount, graphOccurrences } from "./graph.js";
 import type {
   PluginSelectionService,
   WorkspacePanelContext,
@@ -32,34 +36,62 @@ export function runTree(
   choose?: (id: string) => void,
   selected = "",
 ): TemplateResult {
-  return html`<ul class="tree">
-    ${nodes.map(
-      (node) =>
-        html`<li>
-          <div class="run-row">
-            ${choose
-              ? html`<button
-                  class="run"
-                  aria-pressed=${node.id === selected}
-                  @click=${() => choose(node.id)}
-                >
-                  ${node.label}
-                </button>`
-              : html`<span>${node.label}</span>`}
-            <span class="pill" data-state=${node.state}>${node.state}</span>
-          </div>
-          <div class="meta">
-            ${node.kind} · <code>${node.id}</code>${node.model
-              ? html` · ${node.model}`
+  // Empty guard dependencies set disclosure defaults once, never overriding native toggles on polls.
+  return html`<ul class=${choose ? "tree forest" : "tree branches"}>
+    ${repeat(
+      graphOccurrences(nodes),
+      (entry) => entry.key,
+      ({ node }) => {
+        const descendants = descendantCount(node);
+        return html`<li class=${choose ? "graph-root" : "graph-child"}>
+          <article
+            class="node-card"
+            data-selected=${!!choose && node.id === selected}
+          >
+            <div class="run-row">
+              ${choose
+                ? html`<button
+                    class="run"
+                    aria-pressed=${node.id === selected}
+                    @click=${() => choose(node.id)}
+                  >${node.label}</button>`
+                : html`<strong>${node.label}</strong>`}
+              <span class="pill" data-state=${node.state}>${node.state}</span>
+              ${choose && node.id === selected
+                ? html`<span class="selected-label">Selected</span>`
+                : nothing}
+            </div>
+            <div class="meta">
+              ${node.kind} · <code>${node.id}</code>${node.model
+                ? html` · ${node.model}`
+                : nothing}${node.agent ? html` · ${node.agent}` : nothing}
+            </div>
+            ${node.activity
+              ? html`<details class="node-details">
+                  <summary>Activity details</summary>
+                  <pre class="activity">${JSON.stringify(node.activity, null, 2)}</pre>
+                </details>`
               : nothing}
-          </div>
-          ${node.activity
-            ? html`<pre class="activity">
-${JSON.stringify(node.activity, null, 2)}</pre
-              >`
+            ${node.hostStep
+              ? html`<details class="node-details">
+                  <summary>Host step details</summary>
+                  <pre>${JSON.stringify(node.hostStep, null, 2)}</pre>
+                </details>`
+              : nothing}
+          </article>
+          ${descendants
+            ? html`<details
+                class="branch-disclosure"
+                ?open=${guard([], () => descendants <= 8)}
+              >
+                <summary>
+                  ${descendants} reported ${descendants === 1 ? "descendant" : "descendants"}
+                </summary>
+                ${runTree(node.children!)}
+              </details>`
             : nothing}
-          ${node.children?.length ? runTree(node.children) : nothing}
-        </li>`,
+        </li>`;
+      },
     )}
   </ul>`;
 }
@@ -74,12 +106,12 @@ export function overview(
       <h2 id="fleet-heading">
         Fleet
         <span class="pill"
-          >${fleet ? `${fleet.totalActive} active` : "unavailable"}</span
+          >${fleet ? `${fleet.totalActive} reported active` : "unavailable"}</span
         >
       </h2>
       <p class="meta">
-        Fleet rows are display-only. Whole-run controls use top-level async run
-        IDs below.
+        Reported fleet count is independent of graph nodes. Whole-run controls
+        use only authoritative top-level async run IDs.
       </p>
       ${fleet
         ? html`${fleet.topLevelAsyncCapacity
@@ -94,37 +126,21 @@ export function overview(
               ? html`<p class="warning">
                   ${fleet.omitted} fleet entries omitted.
                 </p>`
-              : nothing}
-            <ul class="fleet">
-              ${fleet.entries.map(
-                (entry) =>
-                  html`<li>
-                    <strong>${entry.agent}</strong>
-                    <span class="meta"
-                      >${entry.role ?? ""} ·
-                      ${entry.model ?? "model unavailable"}</span
-                    >
-                    <p>${entry.goal ?? "No goal provided"}</p>
-                    <small
-                      >${entry.tokens.total.toLocaleString()} tokens ·
-                      ${entry.effort ?? "effort unavailable"}</small
-                    >
-                  </li>`,
-              )}
-            </ul>
-            ${!fleet.entries.length
-              ? html`<p>No visible fleet entries in this snapshot.</p>`
               : nothing}`
         : html`<p>
             Fleet projection unavailable. This is not an empty-fleet result.
           </p>`}
     </section>
-    <section aria-labelledby="runs-heading">
-      <h2 id="runs-heading">Async runs</h2>
+    <section aria-labelledby="runs-heading" aria-describedby="graph-description">
+      <h2 id="runs-heading" tabindex="-1">Async run graph</h2>
+      <p id="graph-description" class="meta">
+        Connections show reported async nesting, not execution order. Nested
+        steps are display-only; no inferred child indices. Branches can be
+        expanded or collapsed in this view; snapshot omissions are reported separately.
+      </p>
       ${snapshot
         ? html`<p class="meta">
               Generated ${new Date(snapshot.generatedAt).toLocaleString()}.
-              Nested steps are display-only; no inferred child indices.
             </p>
             ${snapshot.omitted.runs ||
             snapshot.omitted.children ||
@@ -144,6 +160,35 @@ export function overview(
             Async run projection unavailable. Controls require an authoritative
             top-level run.
           </p>`}
+    </section>
+    <section aria-labelledby="unlinked-heading">
+      <h2 id="unlinked-heading">Fleet activity — relationship unavailable</h2>
+      <p class="meta">
+        Fleet entries have no reported run relationship and are display-only.
+        No connections are inferred.
+      </p>
+      ${fleet
+        ? html`<ul class="fleet">
+              ${fleet.entries.map(
+                (entry) =>
+                  html`<li>
+                    <strong>${entry.agent}</strong>
+                    <span class="meta"
+                      >${entry.role ?? ""} ·
+                      ${entry.model ?? "model unavailable"}</span
+                    >
+                    <p>${entry.goal ?? "No goal provided"}</p>
+                    <small
+                      >${entry.tokens.total.toLocaleString()} tokens ·
+                      ${entry.effort ?? "effort unavailable"}</small
+                    >
+                  </li>`,
+              )}
+            </ul>
+            ${!fleet.entries.length
+              ? html`<p>No visible fleet entries in this snapshot.</p>`
+              : nothing}`
+        : html`<p>Fleet projection unavailable.</p>`}
       ${state.status?.text
         ? html`<details>
             <summary>Status summary</summary>
@@ -216,6 +261,7 @@ export class SubagentsPanel extends LitElement {
     this.requestUpdate();
     this.context?.host.requestRender();
   });
+  private graphFocus: HTMLElement | undefined;
   private offSelection: (() => void) | undefined;
   private listenedLifetime: AbortSignal | undefined;
   private selected = "";
@@ -265,7 +311,21 @@ export class SubagentsPanel extends LitElement {
     this.listenedLifetime?.removeEventListener("abort", this.stopped);
     super.disconnectedCallback();
   }
+  protected override willUpdate(): void {
+    const focused = this.shadowRoot?.activeElement;
+    this.graphFocus =
+      focused instanceof HTMLElement && focused.closest(".graph-root")
+        ? focused
+        : undefined;
+  }
   protected override updated(changed: PropertyValues): void {
+    // Keyed cards preserve DOM/disclosures; moving a focused card can still blur it.
+    const focused = this.graphFocus;
+    this.graphFocus = undefined;
+    if (focused && this.shadowRoot?.activeElement !== focused) {
+      if (focused.isConnected) focused.focus();
+      else this.renderRoot.querySelector<HTMLElement>("#runs-heading")?.focus();
+    }
     if (changed.has("selection") || changed.has("lifetime")) this.bind();
     if (changed.has("context")) this.sync();
   }
@@ -483,7 +543,7 @@ export class SubagentsPanel extends LitElement {
           editors, and full transcript streaming are unavailable.
         </p>
       </details>
-      ${overview(state, this.choose, this.selected)}
+      ${keyed(this.formScope, overview(state, this.choose, this.selected))}
       <section aria-labelledby="control-heading">
         <h2 id="control-heading">Run inspector</h2>
         <p>
@@ -995,9 +1055,79 @@ ${JSON.stringify(state.schedules.details.schedules, null, 2)}</pre
       list-style: none;
       padding: 0;
     }
-    .tree .tree {
-      padding-left: 16px;
-      border-left: 2px solid #8884;
+    .forest,
+    .fleet {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+      gap: 16px;
+      align-items: start;
+    }
+    .forest li,
+    .fleet li {
+      min-inline-size: 0;
+      margin: 0;
+      overflow-wrap: anywhere;
+    }
+    .node-card {
+      padding: 12px;
+      border: 1px solid #8886;
+      border-radius: 8px;
+      background: #8881;
+      min-inline-size: 0;
+    }
+    .graph-root > .node-card {
+      border-width: 2px;
+    }
+    .node-card[data-selected="true"] {
+      border-color: #638ff1;
+      background: #638ff112;
+    }
+    .selected-label {
+      font-size: 12px;
+      font-weight: bold;
+    }
+    .run {
+      min-block-size: 44px;
+      text-align: start;
+      max-inline-size: 100%;
+      overflow-wrap: anywhere;
+    }
+    .run-row strong {
+      min-inline-size: 0;
+    }
+    .branch-disclosure {
+      margin-inline-start: 14px;
+    }
+    .branch-disclosure > summary,
+    .node-details > summary {
+      min-block-size: 44px;
+      font-size: 12px;
+    }
+    .branches {
+      margin: 0;
+      padding-inline-start: 18px;
+      border-inline-start: 1px solid #8888;
+    }
+    .branches > li {
+      position: relative;
+      padding-block: 6px;
+    }
+    .branches > li::before {
+      content: "";
+      position: absolute;
+      inset-inline-start: -18px;
+      inset-block-start: 26px;
+      inline-size: 18px;
+      border-block-start: 1px solid #8888;
+    }
+    @media (forced-colors: active) {
+      .node-card[data-selected="true"] {
+        border-color: Highlight;
+      }
+      .branches,
+      .branches > li::before {
+        border-color: CanvasText;
+      }
     }
     li {
       margin: 8px 0;
@@ -1058,6 +1188,23 @@ ${JSON.stringify(state.schedules.details.schedules, null, 2)}</pre
       }
       .actions {
         gap: 6px;
+      }
+      .forest,
+      .fleet {
+        grid-template-columns: minmax(0, 1fr);
+      }
+      .branch-disclosure {
+        margin-inline-start: 4px;
+      }
+      .branches {
+        padding-inline-start: 10px;
+      }
+      .branches > li::before {
+        inset-inline-start: -10px;
+        inline-size: 10px;
+      }
+      .node-card {
+        padding: 8px;
       }
     }
   `;
