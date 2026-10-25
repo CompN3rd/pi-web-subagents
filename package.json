@@ -4,6 +4,7 @@
   "description": "Pi Web adapter for a separately installed pi-subagents RPC event bus",
   "type": "module",
   "license": "MIT",
+  "keywords": ["pi-web.dev-plugin", "pi-package", "pi-web-plugin"],
   "engines": {
     "node": ">=24"
   },

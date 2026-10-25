@@ -347,3 +347,13 @@ local validation commands.
 MIT. This adapter interoperates with the separately distributed MIT-licensed
 `pi-subagents` project by Nico Bailon. See `LICENSE`; bundled dependencies retain
 their license notices in the generated assets.
+
+## Community discovery
+
+This package declares `piWeb.plugins` and the `pi-web.dev-plugin`, `pi-package`,
+and `pi-web-plugin` npm keywords required by the
+[PI WEB community directory](https://pi-web.dev/community-plugins). No separate
+registration or submission is needed. Discovery requires publishing a new public
+npm version containing this metadata; npm search indexing may take time. Source
+changes alone do not update the directory. The compatibility and installation
+requirements above still apply.
