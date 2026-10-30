@@ -1,5 +1,46 @@
 # Changelog
 
+## 0.84.0 — unpublished compatibility candidate
+
+### Release automation
+
+- Match the sibling code-review repository's tag-triggered npm staging flow:
+  push `v<version>` to run Windows/Linux verification and stage the exact verified
+  tarball using OIDC/provenance. Remove the `ADAPTER_PUBLISH_ENABLED` variable gate
+  and automatic main-push publication. Manual dispatch is a tag-only retry path.
+- Require stable matching package/mapping versions, the expected repository and
+  main ancestry. Staging has no source checkout or project dependency install;
+  recheck the artifact ID, SHA-256 and package identity before `npm stage publish`.
+- Owner must configure stage-only npm trust for `adapter-release.yml` and the
+  `npm` environment. Maintainer 2FA approval on npm still makes the version public;
+  no live settings, tag pushes, staging or publication were performed here.
+
+### Upstream compatibility
+
+- Advance the separately installed engine target from 0.79.0 to 0.84.0, with
+  verified npm integrity and matching optional peer/lock mappings. This includes
+  upstream's workflow sandbox security fix **only when the engine is upgraded**.
+- Add bounded, event-driven activity observation using advertised jobs-changed
+  and async-started events. Fetch authoritative status after notifications;
+  reconcile every 5 seconds, retaining polling for older engines.
+- Invalidate status caches on activity changes, including changes during reads.
+  Scope changes, hiding/unmounting and explicit reads cancel observation only.
+- Display reported child thinking levels beside models; clarify administration
+  fallback when upstream slash commands are disabled.
+- Document all nine intervening releases and actual RPC limitations in
+  `docs/upstream-0.84.0.md`. Correct discovery guidance: upstream 0.79.1 released
+  the embedded-host SDK fix. Retain overrides until installed-engine acceptance.
+
+Validation: typecheck, 112 tests (including release-tag/workflow guards), workflow
+YAML parsing, build, packed-release containment/registry
+integrity verification, and Chromium 156 fake-host browser smoke passed.
+New event lifecycle/race coverage is in the unit fixtures; browser smoke remains
+a fake-host regression check, not an engine lifecycle or live-event test.
+
+Host target remains 1.202610.3; engine requires Pi 1.2.0 or newer. No engine code
+is bundled. Local validation does not establish real-host lifecycle acceptance,
+Linux CI, live installation or publication.
+
 ## 0.79.2 — prepared, not published
 
 Adapter-only release. Exact engine mapping remains `pi-subagents@0.79.0`;

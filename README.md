@@ -6,14 +6,27 @@ the execution engine, or replace Pi Web's tracked subsessions.
 
 ## Release status
 
-**0.79.2 is a prepared release candidate**, maintained in the standalone
+**0.84.0 is an unpublished compatibility candidate**, maintained in the standalone
 [CompN3rd/pi-web-subagents repository](https://github.com/CompN3rd/pi-web-subagents).
-At preparation time npm lists 0.79.1 as `latest`; preparation does not publish
-0.79.2. Publishing and upstream proposals are **disabled by default in workflow
-configuration** and require explicit owner setup; live repository settings are
-not attested here. The execution engine is not bundled, forked, or patched.
+This update maps the adapter to separately installed `pi-subagents@0.84.0`;
+preparation does not publish or install either package. Matching release tags automatically start GitHub Actions verification and npm
+staging; npm trust/environment setup and maintainer 2FA approval are still required.
+Upstream proposals remain opt-in; live repository settings are not attested here. The execution engine is not bundled, forked, or patched.
 
-Adapter-only changes in 0.79.2:
+New in 0.84.0:
+
+- Event-driven status refresh for engines advertising `subagent:jobs-changed`,
+  with bounded 5-second reconciliation and polling fallback for older engines.
+- Event-based server cache invalidation, including changes during status reads.
+- Reported workflow child thinking levels alongside models.
+- Exact engine pin/integrity advanced to 0.84.0, which includes upstream's
+  workflow sandbox security fix. Updating this adapter alone does not fix an
+  older installed engine. The engine requires Pi 1.2.0 or newer.
+
+See [the release audit](https://github.com/CompN3rd/pi-web-subagents/blob/main/docs/upstream-0.84.0.md) for all nine intervening releases,
+features already supported, engine-owned fixes and remaining RPC limitations.
+
+Earlier adapter-only changes in 0.79.2:
 
 - Navigation icon and ordering alongside Automations, with host-managed pinning.
 - Connected async run cards using reported nesting, with textual state, native
@@ -87,7 +100,7 @@ see the validation boundaries below.
 | Rich inline tool/message rendering | Not exposed by this host API; panel presentation instead |
 | TUI widgets, overlays and keybindings | Not ported literally |
 | Child-scoped controls | Display only; whole-run controls avoid ambiguous child identities |
-| Streaming/watch and persistent receipts | Not implemented; visible polling and up to 20 in-memory receipts |
+| Activity refresh and receipts | Bounded event-driven observation with 5s reconciliation; older engines poll at 2s active/10s idle; up to 20 in-memory receipts (not persistent) |
 | Host background-run counter | No equivalent public reporting hook established |
 | Pi Web tracked subsessions | Separate built-in system; not adopted as pi-subagents runs |
 
@@ -174,11 +187,11 @@ isolated real-host acceptance. No live browser preferences were inspected here.
 ### Runtime discovery is a separate fix
 
 The browser/server adapter cannot select the SDK used by the already-installed
-execution engine. The reviewed source change in the original `pi-subagents`
-checkout adds host-entry-relative SDK discovery. It must be contributed and
-released upstream, not carried as an adapter-bundled engine or fork. It needs its
-own upstream release or deliberate installation and real lifecycle validation.
-This standalone repository contains no engine patch.
+execution engine. Upstream **0.79.1 released the embedded-host SDK discovery fix**
+(PR #2947); it is included in this candidate's 0.84.0 engine target.
+This standalone repository contains no engine patch. Keep any existing override
+until the installed engine is upgraded and real foreground/detached lifecycles
+pass without it; a package mapping is not runtime validation.
 
 The separately installed registry artifact `pi-subagents@0.79.0` reproduced the
 detached-discovery failure in the isolated SDK-host fixture. The patched build
@@ -202,7 +215,7 @@ npm test
 npm run build
 npm run pack:release
 # Use the validated filename printed by pack:release:
-npm run verify:release -- --tarball artifacts/compn3rd-pi-web-subagents-0.79.2.tgz
+npm run verify:release -- --tarball artifacts/compn3rd-pi-web-subagents-0.84.0.tgz
 ```
 
 The browser is bundled with its dependencies into `dist/browser/index.js`.
@@ -302,45 +315,42 @@ the proposal branch (`gh workflow run adapter-ci.yml --ref <branch>`) and confir
 that the required checks attach to the exact head SHA, or use a reviewed human
 commit to trigger normal PR CI. Never bypass branch protections to merge it.
 
-## Publication gates and owner setup
+## GitHub Actions releases
 
-Both automation switches are unset/false until deliberately enabled. An owner
-must complete these steps after review and the first push; adding YAML alone
-configures none of the GitHub/npm controls:
+Like the sibling code-review plugin, releases are **tag-triggered npm staging**.
+There is no local `npm publish` step and no `ADAPTER_PUBLISH_ENABLED` variable gate.
+Pushing a stable `v<package-version>` tag automatically starts **Stage npm release**
+in `.github/workflows/adapter-release.yml`. Ordinary main pushes run CI, not staging.
 
-1. Configure `main` branch protection/rulesets, required Windows/Linux Adapter CI
-   checks and independent review. Restrict workflow edits and do not auto merge
-   upstream proposals. For proposals, allow Actions to create PRs and scoped
-   `contents: write` / `pull-requests: write` workflow permissions, then set only
-   `ADAPTER_UPSTREAM_PROPOSALS_ENABLED=true` and test a manual run.
-2. Review each upstream source/API change and engine runtime fix. Require packed
-   adapter real-host/engine acceptance, foreground/detached/stop validation,
-   Windows/Linux CI and disposition of the separate upstream root regressions.
-   Registry integrity and unit fixtures alone are not release acceptance.
-3. Establish npm scope/package ownership and first-publication bootstrap through
-   an owner-approved npm path. npm already lists releases through 0.79.1; that
-   does not establish this checkout's current publishing authorization or attest
-   the live trusted-publisher configuration. Verify those controls before release;
-   do not add a token fallback to this workflow or put tokens in source, artifacts,
-   issues or chat.
-4. Bind npm trusted publishing to GitHub owner `CompN3rd`, repository
-   `pi-web-subagents`, workflow `adapter-release.yml`, and environment
-   `adapter-release`. The pinned Node 24/npm toolchain supports OIDC. Configure
-   that GitHub environment with required reviewers and only protected `main`.
-5. Only after those gates, set `ADAPTER_PUBLISH_ENABLED=true` and manually run
-   Adapter release on main. Future main pushes also trigger it. It independently
-   waits for Windows/Linux checks, builds/packs once, verifies bytes/containment,
-   requires environment approval, rechecks artifact hash and registry mapping,
-   then publishes that same scoped tarball with provenance and scripts disabled.
-   It has no credential fallback and never publishes `pi-subagents`. Already
-   published npm versions cannot be overwritten: a push/manual run with an
-   unchanged published version fails publication; do not approve such a run.
+The workflow requires the tag's commit to belong to main history and the package,
+npm lock and engine mapping to agree. It runs Windows/Linux CI, builds and packs,
+verifies the upstream integrity and exact tarball contents, then passes that
+artifact by ID and SHA-256 to a separate OIDC-only staging job. The staging job
+does not check out source, install project dependencies or run package scripts.
+It requires npm >=11.15.0 and uses `npm stage publish`, not direct publication.
+
+**Successful Actions means staged, not public.** Review and approve the stage
+on npmjs.com with maintainer 2FA. Manual workflow dispatch is only a retry path
+and must target a matching release tag, not main. Check pending stages and the
+public package before retrying an uncertain result.
+
+One-time owner setup and the exact release procedure are in
+[docs/releasing.md](https://github.com/CompN3rd/pi-web-subagents/blob/main/docs/releasing.md).
+The npm trust identity is `CompN3rd/pi-web-subagents`, workflow
+`adapter-release.yml`, environment `npm`, with **stage-only** permission.
+Configure GitHub's `npm` environment for `v*` tags; do not retain the old
+main-only `adapter-release` environment binding. These repository changes do
+not configure GitHub/npm settings or prove that trust is active.
+
+Upstream proposal automation is independent and still requires
+`ADAPTER_UPSTREAM_PROPOSALS_ENABLED=true`. Never auto-merge those proposals.
+Release acceptance still includes packed adapter/engine real-host lifecycles
+and disposition of upstream regressions; staging does not establish those gates.
 
 Keep `PI_SUBAGENTS_PI_CODING_AGENT_PACKAGE_ROOT` until the **installed upstream
 engine** includes the discovery fix and real lifecycles pass without the override.
-Adapter updates cannot satisfy that gate. No live configuration, installations,
-GitHub controls, credentials or daemon restarts are changed by this repository's
-local validation commands.
+No live installation, credentials, GitHub/npm controls or daemon restarts are
+changed by preparing the workflow.
 
 ## License
 

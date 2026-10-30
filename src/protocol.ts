@@ -107,7 +107,7 @@ export type PingData = {
   version: 1;
   methods: RpcMethod[];
   capabilities: JsonObject & { managementActions?: ManagementAction[] };
-  events: { asyncComplete?: string; childStatus?: string; processTerminal?: string };
+  events: { asyncComplete?: string; asyncStarted?: string; jobsChanged?: string; childStatus?: string; processTerminal?: string };
   session: { sessionId?: string };
 };
 export type ToolDetails = {
@@ -421,7 +421,10 @@ function projectPing(raw: unknown): PingData {
         ["version"],
       );
   }
-  const events = fields(r.events, { asyncComplete: "string", childStatus: "string", processTerminal: "string" });
+  const events = fields(r.events, {
+    asyncComplete: "string", asyncStarted: "string", jobsChanged: "string",
+    childStatus: "string", processTerminal: "string",
+  });
   const session = fields(r.session, { sessionId: "string" });
   return {
     version: 1,

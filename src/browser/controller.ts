@@ -120,6 +120,7 @@ export class SubagentsController {
   private timer: unknown;
   private requests = new Set<AbortController>();
   private statusPending = false;
+  private watcher: AbortController | undefined;
   constructor(
     private readonly changed: () => void,
     private readonly time: Clock = clock,
@@ -195,6 +196,8 @@ export class SubagentsController {
   }
   private cancel(): void {
     this.generation++;
+    this.watcher?.abort();
+    this.watcher = undefined;
     this.time.clear(this.timer);
     this.timer = undefined;
     for (const request of this.requests) request.abort();
@@ -219,34 +222,65 @@ export class SubagentsController {
       this.state.status?.asyncSnapshot?.runs.some(
         (r) => r.state === "running" || r.state === "queued",
       );
+    const events = this.state.ping?.events.jobsChanged === "subagent:jobs-changed";
     this.timer = this.time.set(
       () => {
-        void this.refresh();
+        if (events) void this.watch();
+        else void this.refresh();
       },
-      active ? 2000 : 10000,
+      events ? 250 : active ? 2000 : 10000,
     );
   }
-  private async request(input: RpcInput): Promise<RpcReply> {
+  private async watch(): Promise<void> {
+    if (!this.available || this.statusPending || this.watcher) return;
+    const watcher = new AbortController();
+    this.watcher = watcher;
+    const generation = this.generation;
+    try {
+      const reply = await this.request(this.input("status"), watcher.signal);
+      if (watcher.signal.aborted || generation !== this.generation) return;
+      const failure = this.failure(reply);
+      if (failure) throw new Error(failure);
+      this.watcher = undefined;
+      await this.refresh();
+    } catch {
+      if (!watcher.signal.aborted && generation === this.generation) {
+        // Re-negotiate on transport failure; never spin on a rejected observation.
+        this.state.ping = undefined;
+        this.state.stale = true;
+        this.schedule();
+        this.changed();
+      }
+    } finally {
+      if (this.watcher === watcher) this.watcher = undefined;
+    }
+  }
+  private async request(input: RpcInput, observation?: AbortSignal): Promise<RpcReply> {
     const peer = this.context?.peer;
     if (!this.available || !peer?.request)
       throw new Error("Selected conversation or package peer unavailable");
     const controller = new AbortController();
     this.requests.add(controller);
+    const cancelObservation = () => controller.abort();
+    observation?.addEventListener("abort", cancelObservation, { once: true });
+    if (observation?.aborted) controller.abort();
     const deadline = this.time.set(() => controller.abort(), 20000);
     let abort: (() => void) | undefined;
     try {
       const cancelled = new Promise<never>((_, reject) => {
         abort = () => reject(new Error("Request cancelled or timed out"));
-        controller.signal.addEventListener("abort", abort, { once: true });
+        if (controller.signal.aborted) abort();
+        else controller.signal.addEventListener("abort", abort, { once: true });
       });
       const raw = await Promise.race([
-        peer.request("rpc", input as unknown as JsonValue, {
+        peer.request(observation ? "wait-for-change" : "rpc", input as unknown as JsonValue, {
           signal: controller.signal,
         }),
         cancelled,
       ]);
       return parseRpcReply(raw, input);
     } finally {
+      observation?.removeEventListener("abort", cancelObservation);
       if (abort) controller.signal.removeEventListener("abort", abort);
       this.time.clear(deadline);
       this.requests.delete(controller);
@@ -271,6 +305,8 @@ export class SubagentsController {
   }
   async refresh(): Promise<void> {
     if (!this.available || this.statusPending) return;
+    this.watcher?.abort();
+    this.watcher = undefined;
     this.time.clear(this.timer);
     this.statusPending = true;
     const generation = this.generation;
@@ -335,6 +371,8 @@ export class SubagentsController {
       if (mutation && method !== "steer" && !confirmed)
         throw new Error("Explicit confirmation required");
       if (method === "status") {
+        this.watcher?.abort();
+        this.watcher = undefined;
         if (this.statusPending)
           throw new Error(
             "Status request already in flight; wait for it to finish",

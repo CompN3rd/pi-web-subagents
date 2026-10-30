@@ -1,38 +1,62 @@
-name: Adapter release
+name: Stage npm release
 
 on:
   push:
-    branches: [main]
+    tags: ['v*']
   workflow_dispatch:
 
-permissions:
-  contents: read
+permissions: {}
 
 concurrency:
-  group: adapter-release
+  group: adapter-release-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
+  release-ref:
+    if: github.repository == 'CompN3rd/pi-web-subagents'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Require matching stable release tag on main history
+        shell: bash
+        run: |
+          node scripts/check-release-ref.mjs
+          git merge-base --is-ancestor HEAD origin/main
+
   checks:
-    if: github.ref == 'refs/heads/main' && vars.ADAPTER_PUBLISH_ENABLED == 'true'
+    needs: release-ref
+    permissions:
+      contents: read
     uses: ./.github/workflows/adapter-ci.yml
     with:
       ref: ${{ github.sha }}
 
   build:
     needs: checks
-    if: github.ref == 'refs/heads/main' && vars.ADAPTER_PUBLISH_ENABLED == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: read
     defaults:
       run:
         shell: bash
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '24.20.0'
           cache: npm
@@ -45,7 +69,7 @@ jobs:
           filename=$(node --input-type=module -e 'import {tarballName,validateReleaseInputs} from "./scripts/release-inputs.mjs"; const {manifest,upstreamLock}=await validateReleaseInputs(); console.log(tarballName(manifest,upstreamLock));')
           node scripts/verify-release.mjs --tarball "artifacts/$filename"
           echo "sha256=$(sha256sum "artifacts/$filename" | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         id: packed
         with:
           name: adapter-package
@@ -58,41 +82,51 @@ jobs:
       sha256: ${{ steps.packed-input.outputs.sha256 }}
 
   publish:
+    name: Stage for npm maintainer 2FA approval
     needs: build
-    if: github.ref == 'refs/heads/main' && vars.ADAPTER_PUBLISH_ENABLED == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    # Configure restricted branches and required reviewers before enabling.
-    environment: adapter-release
+    # Owner must configure npm trust and restrict this environment to v* tags.
+    environment: npm
     permissions:
-      contents: read
       id-token: write
     defaults:
       run:
         shell: bash
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          ref: ${{ github.sha }}
-          persist-credentials: false
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
-        with:
-          node-version: '24.20.0'
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+          node-version: '24'
+          package-manager-cache: false
+      - name: Require a staged-publishing-capable npm CLI
+        run: |
+          NPM_VERSION="$(npm --version)" node -e 'const [major,minor] = process.env.NPM_VERSION.split(".").map(Number); if (major < 11 || (major === 11 && minor < 15)) throw new Error("npm >=11.15.0 required for staged publishing")'
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           artifact-ids: ${{ needs.build.outputs.artifact-id }}
           path: adapter-artifact
           merge-multiple: true
-      - name: Recheck tarball without installing or executing package dependencies
+      - name: Recheck the verified tarball without checkout or package execution
         env:
           EXPECTED_SHA256: ${{ needs.build.outputs.sha256 }}
           TARBALL: ${{ needs.build.outputs.filename }}
         run: |
+          set -euo pipefail
           echo "$EXPECTED_SHA256  adapter-artifact/$TARBALL" | sha256sum --check --strict
-          node scripts/verify-release.mjs --packed-only "adapter-artifact/$TARBALL"
-      - name: Publish verified scoped tarball using npm trusted publishing only
+          tar -xOf "adapter-artifact/$TARBALL" package/package.json | node --input-type=module -e '
+            import fs from "node:fs";
+            const pkg = JSON.parse(fs.readFileSync(0, "utf8"));
+            if (pkg.name !== "@compn3rd/pi-web-subagents" || !/^\d+\.\d+\.\d+$/.test(pkg.version) || process.env.GITHUB_REF !== `refs/tags/v${pkg.version}`) throw new Error("Unexpected artifact name/version");
+            if (pkg.repository?.url !== "git+https://github.com/CompN3rd/pi-web-subagents.git") throw new Error("Unexpected artifact repository");
+          '
+      - name: Stage verified tarball using OIDC and provenance only
         env:
           TARBALL: ${{ needs.build.outputs.filename }}
         run: |
-          test -z "${NODE_AUTH_TOKEN:-}${NPM_TOKEN:-}"
-          npm publish "./adapter-artifact/$TARBALL" --access public --provenance --ignore-scripts
+          set -euo pipefail
+          test -z "${NODE_AUTH_TOKEN:-}${NPM_TOKEN:-}${NPM_ID_TOKEN:-}"
+          test -n "${ACTIONS_ID_TOKEN_REQUEST_URL:-}"
+          test -n "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}"
+          npm stage publish "./adapter-artifact/$TARBALL" --access public --provenance --ignore-scripts --registry=https://registry.npmjs.org/ --loglevel=verbose
+          echo '### Staged only — not published' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Review the stage on npmjs.com and approve it with maintainer 2FA. Verify the public version and provenance before publishing the GitHub release.' >> "$GITHUB_STEP_SUMMARY"

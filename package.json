@@ -1,10 +1,14 @@
 {
   "name": "@compn3rd/pi-web-subagents",
-  "version": "0.79.2",
+  "version": "0.84.0",
   "description": "Pi Web adapter for a separately installed pi-subagents RPC event bus",
   "type": "module",
   "license": "MIT",
-  "keywords": ["pi-web.dev-plugin", "pi-package", "pi-web-plugin"],
+  "keywords": [
+    "pi-web.dev-plugin",
+    "pi-package",
+    "pi-web-plugin"
+  ],
   "engines": {
     "node": ">=24"
   },
@@ -30,7 +34,7 @@
     ]
   },
   "peerDependencies": {
-    "pi-subagents": "0.79.0"
+    "pi-subagents": "0.84.0"
   },
   "peerDependenciesMeta": {
     "pi-subagents": {

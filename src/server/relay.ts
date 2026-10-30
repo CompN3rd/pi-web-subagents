@@ -15,6 +15,9 @@ type Scope = {
   ready: Promise<PingData | undefined>;
   connection?: PiWebHostPiSessionConnection;
   refs: number;
+  revision: number;
+  changed: Set<() => void>;
+  unsubscribe: (() => void)[];
   idle?: ReturnType<typeof setTimeout>;
   reads: Map<string, Read>;
   status?: Read;
@@ -26,6 +29,7 @@ export type RelayOptions = {
   idleMs?: number;
   statusCacheMs?: number;
   connectTimeoutMs?: number;
+  watchMs?: number;
 };
 
 /** One finite connection per exact host authority; no filesystem or execution ownership. */
@@ -46,6 +50,7 @@ export class SessionRelay {
       idleMs: 15_000,
       statusCacheMs: 1_000,
       connectTimeoutMs: 3_000,
+      watchMs: 5_000,
       ...options,
     };
     const dispose = () => this.dispose();
@@ -63,6 +68,8 @@ export class SessionRelay {
   private closeScope(key: string, scope: Scope): void {
     clearTimeout(scope.idle);
     scope.controller.abort();
+    for (const off of scope.unsubscribe) off();
+    scope.unsubscribe = [];
     scope.connection?.close();
     if (this.scopes.get(key) === scope) this.scopes.delete(key);
   }
@@ -76,6 +83,9 @@ export class SessionRelay {
         controller: new AbortController(),
         ready: Promise.resolve(undefined),
         refs: 0,
+        revision: 0,
+        changed: new Set(),
+        unsubscribe: [],
         reads: new Map(),
       };
       this.scopes.set(key, scope);
@@ -122,6 +132,14 @@ export class SessionRelay {
         this.closeScope(key, scope);
         return undefined;
       }
+      // Subscribe only to known public invalidation events, never arbitrary advertised channels.
+      for (const [field, channel] of [
+        ["jobsChanged", "subagent:jobs-changed"],
+        ["asyncStarted", "subagent:async-started"],
+      ] as const) {
+        if (reply.data.events[field] === channel)
+          scope.unsubscribe.push(connection.on(channel, () => this.invalidate(scope)));
+      }
       return reply.data;
     } catch {
       this.closeScope(key, scope);
@@ -142,11 +160,15 @@ export class SessionRelay {
   }
 
   async request(context: ServerPluginPeerRequestContext): Promise<RpcReply> {
+    const startedAt = Date.now();
     let input: RpcInput;
     try {
-      if (context.operation !== "rpc")
-        return failure("invalid-payload", "not-sent", "Only the finite rpc operation is supported.");
+      if (context.operation !== "rpc" && context.operation !== "wait-for-change")
+        return failure("invalid-payload", "not-sent", "Unsupported adapter operation.");
       input = parseRpcInput(context.input);
+      if (context.operation === "wait-for-change" &&
+          (input.method !== "status" || Object.keys(input.params ?? {}).length !== 0))
+        return failure("invalid-payload", "not-sent", "Change observation requires untargeted status.");
     } catch (error) {
       return failure(
         error instanceof ProtocolError ? error.code : "invalid-payload",
@@ -203,10 +225,19 @@ export class SessionRelay {
           "Session does not advertise non-recovering steering; exact-target steering is unavailable.",
           id,
         );
+      if (context.operation === "wait-for-change") {
+        if (ping.events.jobsChanged !== "subagent:jobs-changed")
+          return failure("unavailable", "not-sent", "Activity events unavailable.", id);
+        // Host peer callbacks have a 10s limit, including connection/handshake.
+        await this.waitForChange(scope, signal, Math.max(0, 8_000 - (Date.now() - startedAt)));
+        if (signal.aborted) return failure("closed", "not-sent", "Observation cancelled.", id);
+        // Notification only; the browser must fetch authoritative status after waking.
+        return { version: 1, requestId: id, method: "status", success: true, data: { text: "Refresh status." } };
+      }
       if (mutation) {
-        delete scope.snapshot;
+        this.invalidate(scope);
         const reply = await requestRpc(scope.connection, input, signal, this.options.timeoutMs);
-        delete scope.snapshot;
+        this.invalidate(scope);
         return reply;
       }
       return await this.read(scope, input, signal);
@@ -216,6 +247,28 @@ export class SessionRelay {
       this.requests--;
       if (mutation) this.mutations.delete(mutationKey);
       if (scope) this.release(key, scope);
+    }
+  }
+
+  private invalidate(scope: Scope): void {
+    scope.revision++;
+    delete scope.snapshot;
+    for (const notify of scope.changed) notify();
+  }
+
+  private async waitForChange(scope: Scope, signal: AbortSignal, budgetMs: number): Promise<void> {
+    // A change between the last read and subscription must not be lost.
+    if (!scope.snapshot || signal.aborted) return;
+    let notify!: () => void;
+    const changed = new Promise<void>((resolve) => { notify = resolve; });
+    scope.changed.add(notify);
+    const timer = setTimeout(notify, Math.min(this.options.watchMs, budgetMs));
+    try {
+      await wait(changed, signal);
+    } finally {
+      clearTimeout(timer);
+      scope.changed.delete(notify);
+      delete scope.snapshot;
     }
   }
 
@@ -243,9 +296,11 @@ export class SessionRelay {
       // Read correlation is transport-local. Mutation IDs, especially spawn, are never rewritten.
       const upstreamInput = { ...input, requestId: `adapter-${randomUUID()}` } as RpcInput;
       const current = read;
+      const revision = scope.revision;
       read.task = requestRpc(scope.connection!, upstreamInput, sharedSignal, this.options.timeoutMs)
         .then((reply) => {
-          if (untargeted && !("kind" in reply) && reply.success) scope.snapshot = { at: Date.now(), reply };
+          if (untargeted && revision === scope.revision && !("kind" in reply) && reply.success)
+            scope.snapshot = { at: Date.now(), reply };
           return reply;
         })
         .finally(() => {

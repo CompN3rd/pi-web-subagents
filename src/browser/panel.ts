@@ -64,7 +64,7 @@ export function runTree(
             <div class="meta">
               ${node.kind} · <code>${node.id}</code>${node.model
                 ? html` · ${node.model}`
-                : nothing}${node.agent ? html` · ${node.agent}` : nothing}
+                : nothing}${node.thinking ? html` · thinking: ${node.thinking}` : nothing}${node.agent ? html` · ${node.agent}` : nothing}
             </div>
             ${node.activity
               ? html`<details class="node-details">
@@ -518,7 +518,9 @@ export class SubagentsPanel extends LitElement {
         ${snapshotNotice(state)}
       </p>
       <p class="meta">
-        Visible refresh: 2s active / 10s idle. Hidden or closed panels pause
+        ${state.ping?.events.jobsChanged === "subagent:jobs-changed"
+          ? "Event-driven refresh with a 5s reconciliation interval."
+          : "Visible polling: 2s active / 10s idle."} Hidden or closed panels pause
         observation, not execution.
       </p>
       ${state.error
@@ -863,7 +865,9 @@ ${JSON.stringify(state.schedules.details.schedules, null, 2)}</pre
         <p>
           General administration fallback: use <code>/subagents</code> in the
           parent composer for configuration, agents, model/thinking selection,
-          and schedule creation. This panel implements only schedule RPC
+          and schedule creation (if slash commands are enabled). Otherwise ask
+          the parent agent to use its existing subagent administration tools.
+          This panel implements only schedule RPC
           management; custom editors are unavailable. Remove all composer chips
           before sending /subagents: chips turn it into an ordinary prompt.
         </p>
