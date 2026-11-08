@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Publish verified release artifacts directly to npm through GitHub Actions
+  trusted publishing with provenance, rather than staging for npm 2FA approval.
+  Preserve tag/main ancestry guards, Windows/Linux and browser checks, artifact
+  identity/hash validation, and token-free publishing isolation.
+
 ## 0.84.1
 
 - Target PI WEB 1.202611.1 with browser/server plugin API v5. Keep session RPC

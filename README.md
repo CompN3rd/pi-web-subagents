@@ -11,8 +11,8 @@ The 0.84.1 release line targets PI WEB 1.202611.1 and the separately installed
 localizable labels and regional formatting, and fixes observation pausing after
 batched viewport changes. See [compatibility and verification limits](docs/compatibility-1.202611.1.md).
 
-Matching release tags start GitHub Actions verification and npm staging;
-maintainer 2FA approval makes a staged package public. See
+Matching release tags start GitHub Actions verification and direct npm
+publication using trusted publishing with provenance. See
 [the npm package](https://www.npmjs.com/package/@compn3rd/pi-web-subagents) for
 published versions and [releasing](docs/releasing.md) for the release process.
 The execution engine is not bundled, forked, or patched.
@@ -321,40 +321,16 @@ commit to trigger normal PR CI. Never bypass branch protections to merge it.
 
 ## GitHub Actions releases
 
-Like the sibling code-review plugin, releases are **tag-triggered npm staging**.
-There is no local `npm publish` step and no `ADAPTER_PUBLISH_ENABLED` variable gate.
-Pushing a stable `v<package-version>` tag automatically starts **Stage npm release**
-in `.github/workflows/adapter-release.yml`. Ordinary main pushes run CI, not staging.
+Pushing a stable `v<package-version>` tag starts **Publish npm release** in
+`.github/workflows/adapter-release.yml`. After verification, the workflow publishes
+the exact artifact directly to npm using OIDC and provenance; no npm stage
+approval is required. Main pushes run CI only. Local publishing is not used.
 
-The workflow requires the tag's commit to belong to main history and the package,
-npm lock and engine mapping to agree. It runs Windows/Linux CI, builds and packs,
-verifies the upstream integrity and exact tarball contents, then passes that
-artifact by ID and SHA-256 to a separate OIDC-only staging job. The staging job
-does not check out source, install project dependencies or run package scripts.
-It requires npm >=11.15.0 and uses `npm stage publish`, not direct publication.
-
-**Successful Actions means staged, not public.** Review and approve the stage
-on npmjs.com with maintainer 2FA. Manual workflow dispatch is only a retry path
-and must target a matching release tag, not main. Check pending stages and the
-public package before retrying an uncertain result.
-
-One-time owner setup and the exact release procedure are in
-[docs/releasing.md](https://github.com/CompN3rd/pi-web-subagents/blob/main/docs/releasing.md).
-The npm trust identity is `CompN3rd/pi-web-subagents`, workflow
-`adapter-release.yml`, environment `npm`, with **stage-only** permission.
-Configure GitHub's `npm` environment for `v*` tags; do not retain the old
-main-only `adapter-release` environment binding. These repository changes do
-not configure GitHub/npm settings or prove that trust is active.
-
-Upstream proposal automation is independent and still requires
-`ADAPTER_UPSTREAM_PROPOSALS_ENABLED=true`. Never auto-merge those proposals.
-Release acceptance still includes packed adapter/engine real-host lifecycles
-and disposition of upstream regressions; staging does not establish those gates.
-
-Keep `PI_SUBAGENTS_PI_CODING_AGENT_PACKAGE_ROOT` until the **installed upstream
-engine** includes the discovery fix and real lifecycles pass without the override.
-No live installation, credentials, GitHub/npm controls or daemon restarts are
-changed by preparing the workflow.
+See [releasing](docs/releasing.md) for trust/environment setup, release acceptance,
+and safe retry procedures. Workflow changes on main do not alter existing tags;
+`v0.84.1` retains its original staged workflow. Publication does not install the
+adapter/engine or restart services. Upstream proposals remain independently
+opt-in and must not be auto-merged.
 
 ## License
 

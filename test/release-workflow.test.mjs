@@ -21,7 +21,7 @@ test("current mapping is usable by the tag guard without dependency installation
   validateReleaseRef(manifest, { ...env, GITHUB_REF: `refs/tags/v${manifest.version}` });
 });
 
-test("release workflow stages tag builds with main ancestry and exact artifact verification", async () => {
+test("release workflow directly publishes tag builds with main ancestry and exact artifact verification", async () => {
   const workflow = await readFile(new URL("../.github/workflows/adapter-release.yml", import.meta.url), "utf8");
   assert.match(workflow, /push:\s+tags: \['v\*'\]/);
   assert.doesNotMatch(workflow, /ADAPTER_PUBLISH_ENABLED|branches: \[main\]/);
@@ -42,13 +42,13 @@ test("release workflow stages tag builds with main ancestry and exact artifact v
   assert.doesNotMatch(publish, /contents: write|actions\/checkout|npm ci|cache: npm|registry-url:/);
   assert.match(publish, /sha256sum --check --strict/);
   assert.match(publish, /refs\/tags\/v\$\{pkg.version\}/);
-  assert.match(publish, /npm >=11\.15\.0 required/);
+  assert.match(publish, /npm >=11\.5\.1 required for trusted publishing/);
   assert.match(publish, /NODE_AUTH_TOKEN/);
   assert.match(publish, /NPM_TOKEN/);
   assert.match(publish, /NPM_ID_TOKEN/);
   assert.match(publish, /ACTIONS_ID_TOKEN_REQUEST_URL/);
-  assert.match(publish, /npm stage publish .*--provenance --ignore-scripts --registry=https:\/\/registry\.npmjs\.org\//);
-  assert.doesNotMatch(publish, /npm publish|npm stage approve/);
+  assert.match(publish, /npm publish "\.\/adapter-artifact\/\$TARBALL" --access public --provenance --ignore-scripts --registry=https:\/\/registry\.npmjs\.org\//);
+  assert.doesNotMatch(publish, /npm stage|npm dist-tag|secrets\.|--loglevel=verbose/);
   for (const [, action] of workflow.matchAll(/uses: (actions\/[^\s]+)/g))
     assert.match(action, /@[a-f0-9]{40}$/);
 });

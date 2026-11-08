@@ -57,7 +57,7 @@ The Chromium smoke mounts the built adapter with fake public host services and
 RPC responses; it covers native interaction, scope changes, uncertainty,
 visibility batching, mobile focus/containment, localization and palette changes,
 and cleanup. CI runs it separately from the Windows/Linux unit and packaging
-jobs, including before npm staging.
+jobs, including before npm publication.
 
 The fake stylesheet/localization services exercise the integration contract, not
 the host's complete CSS or translation implementation. No live daemon,

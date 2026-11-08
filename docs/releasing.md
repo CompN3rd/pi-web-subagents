@@ -2,41 +2,43 @@
 
 Package: `@compn3rd/pi-web-subagents` · repository: `CompN3rd/pi-web-subagents`.
 
-## Tag → checks → npm stage → maintainer approval
+## Tag → checks → direct npm publication
 
-This follows the sibling `pi-web-code-review` repository's staged-publishing
-model. Push a matching stable `v<version>` tag; GitHub Actions automatically
-runs **Stage npm release** (`adapter-release.yml`). There is no local publish
+Push a matching stable `v<version>` tag; GitHub Actions automatically runs
+**Publish npm release** (`adapter-release.yml`). There is no local publish
 command, no main-push publication, and no `ADAPTER_PUBLISH_ENABLED` switch.
-Manual dispatch remains available only on a matching tag for controlled retries.
+Manual dispatch is available only on a matching tag for controlled retries.
 
 The workflow rejects branch dispatches, mismatched/prerelease tags, wrong
 repository identities and commits outside `origin/main` history. Windows/Linux
-CI and the isolated Chromium fake-host smoke run against the tagged SHA. A build job packs once, verifies exact contents
-and the pinned engine's registry integrity, and uploads the tarball. A separate
-job downloads that exact artifact by ID, rechecks its SHA-256 and package
-identity, and invokes `npm stage publish` with OIDC/provenance and scripts disabled.
-The staging job has no checkout, project installation or package cache, and only
-`id-token: write` permission. Actions are pinned to the same SHAs as the sibling.
+CI and the isolated Chromium fake-host smoke run against the tagged SHA. A build
+job packs once, verifies exact contents and the pinned engine's registry
+integrity, and uploads the tarball. A separate publishing job downloads that
+exact artifact by ID, rechecks its SHA-256 and package identity, and invokes
+`npm publish` with OIDC/provenance and scripts disabled. It has no checkout,
+project installation or package cache, and only `id-token: write` permission.
+Actions are pinned to immutable commit SHAs.
 
-Node 24 in the staging job must supply npm >=11.15.0. The workflow fails rather
-than silently falling back to direct publishing or token authentication. Do not
-add npm token secrets, dummy auth tokens or setup-node `registry-url` token setup.
-Do not log raw JWTs, environment dumps or npm debug/cache directories.
+The publishing job uses Node 24 and requires npm >=11.5.1 for trusted publishing.
+It fails rather than falling back to token authentication. Do not add npm token
+secrets, dummy auth tokens or setup-node `registry-url` token setup. Do not log
+raw JWTs, environment dumps or npm debug/cache directories.
 
-**Staged is not published.** An npm maintainer reviews and approves the staged
-package with 2FA on npmjs.com. This workflow never automates that approval.
+**A successful publish makes the package public immediately.** There is no npm
+stage or separate maintainer approval step. GitHub environment reviewers, if
+configured, approve the job before publication. Protect release-tag creation
+accordingly; account 2FA can remain enabled with token publishing disallowed.
 
-## One-time owner setup
+## Owner configuration
 
-These are instructions, not claims about live settings. No GitHub/npm settings
-were changed while preparing this workflow.
+The maintainer enabled direct publishing on npm after approving 0.84.1, which
+used the previous staged flow. The agent did not change npm or GitHub settings.
+Verify the current configuration when troubleshooting:
 
-1. Protect main and require the Windows/Linux Adapter CI checks and review.
-   Restrict release-tag creation/update/deletion to release maintainers.
-2. Create/configure GitHub environment **`npm`** and allow release **tags `v*`**,
-   not only branches. Configure environment reviewers according to owner policy;
-   an optional GitHub approval is separate from mandatory npm 2FA approval.
+1. Protect main and require the Windows/Linux Adapter CI checks, Chromium smoke,
+   and review. Restrict release-tag creation/update/deletion to maintainers.
+2. Configure GitHub environment **`npm`** to allow release **tags `v*`**, not only
+   branches. Configure environment reviewers according to owner policy.
 3. Configure npm trusted publishing for these exact, case-sensitive fields:
 
    | Field | Value |
@@ -46,17 +48,15 @@ were changed while preparing this workflow.
    | Repository | `pi-web-subagents` |
    | Workflow filename | `adapter-release.yml` |
    | Environment | `npm` |
-   | Allowed action | Stage only (`npm stage publish`) |
+   | Allowed action | Direct publishing (`npm publish`) |
 
-   Replace any old trust/environment binding to `adapter-release` restricted to
-   main. Do not grant direct publication or dist-tag privileges as a workaround.
-   Verify trust status/expiry on npm rather than assuming a saved connection is
-   active. Keep account 2FA enabled and prefer npm's disallow-token policy.
+   Verify trust status/expiry rather than assuming a saved connection is active.
+   Direct publishing does not require separate `npm dist-tag` privileges. Keep
+   account 2FA enabled and prefer npm's disallow-token policy.
 4. The old `ADAPTER_PUBLISH_ENABLED` variable is ignored and can be removed.
    `ADAPTER_UPSTREAM_PROPOSALS_ENABLED` remains an independent opt-in switch.
 
-References: [npm staged publishing](https://docs.npmjs.com/staged-publishing/)
-and [trusted publishing](https://docs.npmjs.com/trusted-publishers/).
+Reference: [npm trusted publishing](https://docs.npmjs.com/trusted-publishers/).
 
 ## Normal release
 
@@ -68,39 +68,35 @@ and [trusted publishing](https://docs.npmjs.com/trusted-publishers/).
    fake-host tests cannot establish. Locally run typecheck, tests, build, pack
    and registry/containment verification as documented in README.
 3. Commit and push the reviewed changes to main. Create and push the matching
-   annotated tag. For the current candidate, once accepted:
-
-   ```sh
-   git tag -a v0.84.1 -m "Release 0.84.1"
-   git push origin v0.84.1
-   ```
-
-   Tag the accepted main commit, not unrelated local changes. A main push alone
-   does not create a tag or stage a release.
-4. Watch **Stage npm release** in Actions and approve the GitHub environment if
+   annotated tag for the new version. Tag the accepted main commit, not unrelated
+   local changes. A main push alone does not publish a release. Never reuse
+   `v0.84.1`, which is already published.
+4. Watch **Publish npm release** in Actions and approve the GitHub environment if
    configured to require it. Review the verified `adapter-package` artifact.
-5. Review the stage reported by npm in **Staged Packages** on npmjs.com. Check
-   package/version/provenance and compare its tarball integrity with the verified
-   artifact. Approve using maintainer 2FA.
-6. Verify the public version, integrity and provenance:
+5. Verify the exact public version, integrity and provenance against the artifact:
 
    ```sh
-   npm view @compn3rd/pi-web-subagents@0.84.1 version dist.integrity
+   npm view @compn3rd/pi-web-subagents@<version> version dist.integrity dist.attestations
    ```
 
-   Only then mark the release published in documentation or create a public
-   GitHub release. Installation in Pi Web is a separate maintenance operation.
+   Only then create a public GitHub release from the corresponding changelog
+   section. Installing the adapter in PI WEB remains a separate maintenance
+   operation.
 
 ## Failures and retries
 
-A timeout or failed job does not prove that npm accepted nothing. Inspect both
-the exact public version and pending npm stages before rerunning. Manual dispatch
-must use the tag; branch dispatch intentionally fails validation. Retrying uses
-the workflow at the tagged revision, not later fixes on main. Use a new version
-and tag for fixes, unless the owner explicitly approves moving an unpublished
-tag. Never overwrite a published version.
+A timeout or failed job does not prove that npm accepted nothing. Inspect the
+exact public version before rerunning. If it exists, compare its integrity and
+provenance with the verified artifact; do not republish or overwrite it.
 
-Dry-runs and `npm whoami` do not test OIDC stage authorization. Check the trust
-identity, environment, allowed action and npm CLI version instead of adding a
-token or weakening 2FA. Successful staging does not certify real-host execution.
+Manual dispatch must use the tag; branch dispatch intentionally fails validation.
+Retrying uses the workflow at the tagged revision, not later fixes on main.
+In particular, rerunning `v0.84.1` still uses the old staged workflow. Use a new
+version/tag for changed release inputs, unless the owner explicitly approves
+moving an unpublished tag. Do not move a published release tag.
+
+Dry-runs and `npm whoami` do not test OIDC authorization. Check the trust identity,
+environment, allowed direct-publish action and npm CLI version instead of adding
+a token or weakening 2FA. Local checks cannot establish that the next direct
+publish will be authorized; that requires a future unpublished release.
 The workflow neither installs the adapter/engine nor restarts any daemon.
