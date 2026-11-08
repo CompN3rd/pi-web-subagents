@@ -44,3 +44,25 @@ jobs:
       - run: node scripts/verify-release.mjs --tarball "artifacts/$TARBALL"
         env:
           TARBALL: ${{ steps.packed.outputs.filename }}
+
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: '24.20.0'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run build
+      - name: Install isolated browser tooling
+        run: |
+          npm install --prefix "$RUNNER_TEMP/adapter-browser" --no-package-lock --ignore-scripts --no-audit --no-fund playwright@1.64.1
+          node "$RUNNER_TEMP/adapter-browser/node_modules/playwright/cli.js" install --with-deps chromium
+      - run: npm run test:browser
+        env:
+          PI_WEB_SMOKE_PLAYWRIGHT_ROOT: ${{ runner.temp }}/adapter-browser/node_modules/playwright

@@ -46,7 +46,7 @@ export function validateManifest(manifest, upstreamLock) {
   assert.equal(upstreamLock.upstream.version, manifest.peerDependencies["pi-subagents"]);
   validateDistribution(upstreamLock.upstream.version, upstreamLock.upstream);
   assert.deepEqual(upstreamLock.host, {
-    name: "@jmfederico/pi-web", version: "1.202610.3", browserApiVersion: 4, serverApiVersion: 3,
+    name: "@jmfederico/pi-web", version: "1.202611.1", browserApiVersion: 5, serverApiVersion: 5,
   });
   assert.equal(upstreamLock.transport, "separately-installed-pi-subagents-rpc-event-bus");
   assert.equal(manifest.devDependencies[upstreamLock.host.name], upstreamLock.host.version);

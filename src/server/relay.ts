@@ -3,7 +3,7 @@ import type {
   PiWebHostPiSessionConnection,
   PiWebHostPiSessionEventsV1,
   PiWebHostPiSessionSelection,
-  ServerPluginPeerRequestContext,
+  ServerPluginPeerRequestContextV5,
 } from "@jmfederico/pi-web/server-plugin-api";
 import { isMutation, parseRpcInput, ProtocolError, type PingData, type RpcInput, type RpcReply } from "../protocol.ts";
 import { failure, requestRpc } from "./rpc-client.ts";
@@ -159,7 +159,7 @@ export class SessionRelay {
     scope.idle = setTimeout(() => this.closeScope(key, scope), this.options.idleMs);
   }
 
-  async request(context: ServerPluginPeerRequestContext): Promise<RpcReply> {
+  async request(context: ServerPluginPeerRequestContextV5): Promise<RpcReply> {
     const startedAt = Date.now();
     let input: RpcInput;
     try {
@@ -177,12 +177,15 @@ export class SessionRelay {
       );
     }
     const id = input.requestId;
-    if (context.workspace.projectId !== context.project.id || !context.project.id || !context.workspace.id)
+    if (context.scope.kind !== "workspace")
+      return failure("unavailable", "not-sent", "Subagents requires a workspace scope.", id);
+    const { project, workspace } = context.scope;
+    if (workspace.projectId !== project.id || !project.id || !workspace.id)
       return failure("unavailable", "not-sent", "Host workspace authority mismatch.", id);
     if (context.signal.aborted || this.controller.signal.aborted)
       return failure("closed", "not-sent", "Request cancelled before admission.", id);
     if (this.requests >= 128) return failure("unavailable", "not-sent", "Adapter request capacity reached.", id);
-    const selection = { projectId: context.project.id, workspaceId: context.workspace.id, sessionId: input.sessionId };
+    const selection = { projectId: project.id, workspaceId: workspace.id, sessionId: input.sessionId };
     const key = JSON.stringify([selection.projectId, selection.workspaceId, selection.sessionId]);
     const mutationKey = JSON.stringify([key, id]);
     const mutation = isMutation(input);

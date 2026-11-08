@@ -12,7 +12,7 @@ Manual dispatch remains available only on a matching tag for controlled retries.
 
 The workflow rejects branch dispatches, mismatched/prerelease tags, wrong
 repository identities and commits outside `origin/main` history. Windows/Linux
-CI runs against the tagged SHA. A build job packs once, verifies exact contents
+CI and the isolated Chromium fake-host smoke run against the tagged SHA. A build job packs once, verifies exact contents
 and the pinned engine's registry integrity, and uploads the tarball. A separate
 job downloads that exact artifact by ID, rechecks its SHA-256 and package
 identity, and invokes `npm stage publish` with OIDC/provenance and scripts disabled.
@@ -71,8 +71,8 @@ and [trusted publishing](https://docs.npmjs.com/trusted-publishers/).
    annotated tag. For the current candidate, once accepted:
 
    ```sh
-   git tag -a v0.84.0 -m "Release 0.84.0"
-   git push origin v0.84.0
+   git tag -a v0.84.1 -m "Release 0.84.1"
+   git push origin v0.84.1
    ```
 
    Tag the accepted main commit, not unrelated local changes. A main push alone
@@ -85,7 +85,7 @@ and [trusted publishing](https://docs.npmjs.com/trusted-publishers/).
 6. Verify the public version, integrity and provenance:
 
    ```sh
-   npm view @compn3rd/pi-web-subagents@0.84.0 version dist.integrity
+   npm view @compn3rd/pi-web-subagents@0.84.1 version dist.integrity
    ```
 
    Only then mark the release published in documentation or create a public

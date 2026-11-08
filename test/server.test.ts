@@ -4,7 +4,7 @@ import { SessionRelay } from "../src/server/relay.ts";
 import plugin from "../src/server.ts";
 import { PI_WEB_HOST_PI_SESSION_EVENTS_CAPABILITY } from "@jmfederico/pi-web/server-plugin-api";
 import type {
-  ServerPluginActivationContext,
+  ServerPluginActivationContextV5 as ServerPluginActivationContext,
   ServerPluginCapabilityResolver,
 } from "@jmfederico/pi-web/server-plugin-api";
 import { FakeBus, host, input, context, dataFor, pingData, tick } from "./fixtures/rpc/fake-bus.ts";
@@ -25,7 +25,7 @@ test("server public plugin starts through required capability and health is inde
   const h = host();
   const lifetime = new AbortController();
   const invocation = new AbortController();
-  assert.equal(plugin.apiVersion, 3);
+  assert.equal(plugin.apiVersion, 5);
   assert.deepEqual(plugin.requires, [PI_WEB_HOST_PI_SESSION_EVENTS_CAPABILITY]);
   const activation = plugin.activate({
     lifetimeSignal: lifetime.signal,
@@ -57,9 +57,14 @@ test("server uses only host project/workspace and selected exact session; wrong 
     await h.relay.request(context());
     assert.deepEqual(h.selections, [{ projectId: "project-1", workspaceId: "workspace-1", sessionId: "session-1" }]);
     const ctx = context();
-    const reply = await h.relay.request({ ...ctx, workspace: { ...ctx.workspace, projectId: "wrong" } });
+    const reply = await h.relay.request({ ...ctx, scope: { ...ctx.scope, workspace: { ...ctx.scope.workspace, projectId: "wrong" } } });
     assert.ok("kind" in reply && reply.outcome === "not-sent");
     assert.equal(h.selections.length, 1);
+    for (const scope of [{ kind: "machine" }, { kind: "project", project: ctx.scope.project }] as const) {
+      const rejected = await h.relay.request({ ...ctx, scope });
+      assert.ok("kind" in rejected && rejected.outcome === "not-sent");
+    }
+    assert.equal(h.selections.length, 1, "non-workspace scopes never connect");
     const spoof = await h.relay.request({ ...ctx, input: { ...input(), projectId: "spoof" } as JsonValue });
     assert.ok("kind" in spoof);
     assert.equal(h.selections.length, 1);

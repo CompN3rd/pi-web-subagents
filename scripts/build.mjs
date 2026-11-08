@@ -4,6 +4,14 @@ import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const publicServerApi = "@jmfederico/pi-web/server-plugin-api";
+// Audited dependency-free implementation closure of the public token module.
+// Do not allow arbitrary host implementation files when the public API changes.
+const publicTokenInputs = new Set([
+  "node_modules/@jmfederico/pi-web/dist/server-plugin-api.js",
+  "node_modules/@jmfederico/pi-web/dist/shared/thinkingLevels.js",
+  "node_modules/@jmfederico/pi-web/dist/shared/pluginCatalogTypes.js",
+  "node_modules/@jmfederico/pi-web/dist/shared/pluginSessionLifecycleTypes.js",
+]);
 const boundary = (browser) => ({
   name: "adapter-package-boundary",
   setup(builder) {
@@ -35,7 +43,7 @@ for (const browser of [true, false]) {
     plugins: [boundary(browser)],
   });
   for (const input of Object.keys(result.metafile.inputs)) {
-    const publicTokenModule = input === "node_modules/@jmfederico/pi-web/dist/server-plugin-api.js";
+    const publicTokenModule = publicTokenInputs.has(input);
     if (input.startsWith("../") || (!publicTokenModule && /node_modules\/(?:@jmfederico\/pi-web|pi-subagents)\//.test(input))) {
       throw new Error(`Build crossed adapter boundary: ${input}`);
     }

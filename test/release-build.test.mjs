@@ -21,9 +21,12 @@ test("build bundles Lit and public capability tokens for clean installs, and rej
       await cp(new URL(`node_modules/${name}`, root), join(directory, "node_modules", name), { recursive: true });
     }
     const host = join(directory, "node_modules/@jmfederico/pi-web");
-    await mkdir(join(host, "dist"), { recursive: true });
+    await mkdir(join(host, "dist/shared"), { recursive: true });
     await cp(new URL("node_modules/@jmfederico/pi-web/package.json", root), join(host, "package.json"));
     await cp(new URL("node_modules/@jmfederico/pi-web/dist/server-plugin-api.js", root), join(host, "dist/server-plugin-api.js"));
+    for (const file of ["thinkingLevels.js", "pluginCatalogTypes.js", "pluginSessionLifecycleTypes.js"]) {
+      await cp(new URL(`node_modules/@jmfederico/pi-web/dist/shared/${file}`, root), join(host, `dist/shared/${file}`));
+    }
     await writeFile(join(directory, "package.json"), '{"type":"module"}');
     await writeFile(join(directory, "src/browser.ts"), 'import { html } from "lit"; export const render = () => html`<p>fixture</p>`;');
     await writeFile(join(directory, "src/server.ts"), 'import * as host from "@jmfederico/pi-web/server-plugin-api"; export const api = host;');
@@ -43,6 +46,11 @@ test("build bundles Lit and public capability tokens for clean installs, and rej
     } finally {
       await rm(consumer, { recursive: true, force: true });
     }
+    const publicApi = await readFile(join(host, "dist/server-plugin-api.js"), "utf8");
+    await writeFile(join(host, "dist/private.js"), "export const secret = 1;");
+    await writeFile(join(host, "dist/server-plugin-api.js"), publicApi + '\nexport { secret } from "./private.js";');
+    await assert.rejects(exec(process.execPath, [join(directory, "scripts/build.mjs")]), /Build crossed adapter boundary: .*private\.js/);
+    await writeFile(join(host, "dist/server-plugin-api.js"), publicApi);
     for (const specifier of ["@jmfederico/pi-web/plugin-api", "pi-subagents"]) {
       await writeFile(join(directory, "src/browser.ts"), `import * as unsupported from "${specifier}"; export { unsupported };`);
       await assert.rejects(exec(process.execPath, [join(directory, "scripts/build.mjs")]), /Unsupported runtime import/);

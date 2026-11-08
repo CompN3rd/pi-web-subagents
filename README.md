@@ -6,12 +6,16 @@ the execution engine, or replace Pi Web's tracked subsessions.
 
 ## Release status
 
-**0.84.0 is an unpublished compatibility candidate**, maintained in the standalone
-[CompN3rd/pi-web-subagents repository](https://github.com/CompN3rd/pi-web-subagents).
-This update maps the adapter to separately installed `pi-subagents@0.84.0`;
-preparation does not publish or install either package. Matching release tags automatically start GitHub Actions verification and npm
-staging; npm trust/environment setup and maintainer 2FA approval are still required.
-Upstream proposals remain opt-in; live repository settings are not attested here. The execution engine is not bundled, forked, or patched.
+The 0.84.1 release line targets PI WEB 1.202611.1 and the separately installed
+`pi-subagents@0.84.0` engine. It adopts plugin API v5, shared host controls,
+localizable labels and regional formatting, and fixes observation pausing after
+batched viewport changes. See [compatibility and verification limits](docs/compatibility-1.202611.1.md).
+
+Matching release tags start GitHub Actions verification and npm staging;
+maintainer 2FA approval makes a staged package public. See
+[the npm package](https://www.npmjs.com/package/@compn3rd/pi-web-subagents) for
+published versions and [releasing](docs/releasing.md) for the release process.
+The execution engine is not bundled, forked, or patched.
 
 New in 0.84.0:
 
@@ -61,8 +65,8 @@ build or tests.
 | --- | --- |
 | Adapter | `@compn3rd/pi-web-subagents`; exact version in [`package.json`](package.json) |
 | Execution engine (separate installation) | Exact `pi-subagents` version/integrity in [`upstream-lock.json`](upstream-lock.json) |
-| Web host | `@jmfederico/pi-web@1.202610.3` |
-| Host plugin APIs | Browser 4 / server 3 |
+| Web host | `@jmfederico/pi-web@1.202611.1` |
+| Host plugin APIs | Browser 5 / server 5; stylesheet integration v1 |
 | Node | 24 or newer; development validation uses 24.20.0 |
 
 `upstream-lock.json` records the exact upstream npm tarball and SHA-512 integrity.
@@ -188,7 +192,7 @@ isolated real-host acceptance. No live browser preferences were inspected here.
 
 The browser/server adapter cannot select the SDK used by the already-installed
 execution engine. Upstream **0.79.1 released the embedded-host SDK discovery fix**
-(PR #2947); it is included in this candidate's 0.84.0 engine target.
+(PR #2947); it is included in the pinned 0.84.0 engine target.
 This standalone repository contains no engine patch. Keep any existing override
 until the installed engine is upgraded and real foreground/detached lifecycles
 pass without it; a package mapping is not runtime validation.
@@ -215,7 +219,7 @@ npm test
 npm run build
 npm run pack:release
 # Use the validated filename printed by pack:release:
-npm run verify:release -- --tarball artifacts/compn3rd-pi-web-subagents-0.84.0.tgz
+npm run verify:release -- --tarball artifacts/compn3rd-pi-web-subagents-0.84.1.tgz
 ```
 
 The browser is bundled with its dependencies into `dist/browser/index.js`.

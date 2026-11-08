@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.84.1
+
+- Target PI WEB 1.202611.1 with browser/server plugin API v5. Keep session RPC
+  workspace-scoped and reject machine/project requests before connecting.
+- Use host-managed shared controls, contributed stylesheets, palette and font
+  properties. Follow live language, regional formatting, time and RTL preferences
+  with English fallback; upstream data and protocol diagnostics remain verbatim.
+- Keep visible panels observing after batched viewport transitions by using the
+  latest IntersectionObserver entry. Preserve drafts and run selection during
+  language/theme changes, and release host registrations on unmount.
+- Update the audited public server API bundling boundary without admitting
+  private host implementations or bundling the execution engine.
+- Gate releases on the isolated Chromium interaction smoke alongside existing
+  Windows/Linux checks. Keep the separately installed engine pinned to 0.84.0.
+
+Validation on Node 24.20.0: typecheck, 114 tests, build, packed-release
+containment/registry integrity verification, and three consecutive Chromium 156
+fake-host smoke runs passed. This does not establish live daemon, federation,
+provider-backed execution, or installed-engine SDK acceptance.
+See [compatibility and verification limits](docs/compatibility-1.202611.1.md).
+Publication does not install this plugin, upgrade the engine, or restart services.
+
 ## 0.84.0 — unpublished compatibility candidate
 
 ### Release automation

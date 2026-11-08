@@ -78,6 +78,11 @@ try {
   await page.waitForFunction(() =>
     window.fixture.calls.some((call) => call.method === "status"),
   );
+  await page.evaluate(() => window.fixture.batchVisibility(false));
+  assert.equal(await page.evaluate(() => document.querySelector("body>div").firstElementChild.controller.available), false);
+  await page.evaluate(() => window.fixture.batchVisibility(true));
+  await page.waitForFunction(() => document.querySelector("body>div").firstElementChild.controller.state.ping !== undefined);
+  assert.equal(await page.evaluate(() => document.querySelector("body>div").firstElementChild.controller.available), true);
   await page
     .getByText('<img src=x onerror="window.evil=true"> literal transcript', {
       exact: true,
@@ -347,10 +352,35 @@ try {
   // click() checks enabled before scrolling. Explicitly reveal the control first
   // so IntersectionObserver can resume the real handshake after viewport changes.
   await stop.scrollIntoViewIfNeeded();
-  await page.waitForFunction(() => {
-    const panel = document.querySelector("body>div").firstElementChild;
-    return [...panel.shadowRoot.querySelectorAll("button")].some((button) => button.textContent.trim() === "Stop run…" && !button.disabled);
-  });
+  try {
+    await page.waitForFunction(() => {
+      const panel = document.querySelector("body>div").firstElementChild;
+      return [...panel.shadowRoot.querySelectorAll("button")].some((button) => button.textContent.trim() === "Stop run…" && !button.disabled);
+    });
+  } catch (error) {
+    console.error("Mobile readiness diagnostics", await page.evaluate(async () => {
+      const panel = document.querySelector("body>div").firstElementChild;
+      return {
+        available: panel.controller.available,
+        state: panel.controller.state,
+        visible: panel.controller.visible,
+        mounted: panel.controller.mounted,
+        inViewport: panel.inViewport,
+        active: panel.active,
+        visibility: document.visibilityState,
+        rectangle: panel.getBoundingClientRect().toJSON(),
+        intersection: await new Promise((resolve) => {
+          const observer = new IntersectionObserver(([entry]) => {
+            resolve({ isIntersecting: entry.isIntersecting, bounding: entry.boundingClientRect.toJSON(), intersection: entry.intersectionRect.toJSON(), root: entry.rootBounds?.toJSON() });
+            observer.disconnect();
+          });
+          observer.observe(panel);
+        }),
+        recentCalls: window.fixture.calls.slice(-5),
+      };
+    }));
+    throw error;
+  }
   await recordMobileVisibility("after-scroll-and-enabled");
   await stop.click();
   await page.locator(".confirmation").waitFor();
@@ -377,6 +407,26 @@ try {
   assert.equal(await root.evaluate((element) => element.getRootNode().activeElement === element), true);
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth), false);
   await page.emulateMedia({ forcedColors: "none" });
+  // Live localization and palette updates must not replace drafts, selection,
+  // confirmation state, or initiate execution. These are fake public host services.
+  await page.locator('textarea[name="message"]').fill("keep my draft");
+  const beforeLocalization = await mutationCalls();
+  await page.evaluate(() => {
+    window.fixture.localization.change("ar", "de-DE", { title: "Agents traduits", refresh: "Actualiser" }, "rtl");
+    document.documentElement.style.setProperty("--pi-accent", "rgb(128, 64, 192)");
+    document.documentElement.style.setProperty("--pi-font", "serif");
+  });
+  await page.getByRole("heading", { name: "Agents traduits", exact: true }).waitFor();
+  await page.getByRole("button", { name: "Actualiser", exact: true }).waitFor();
+  assert.equal(await page.locator("main").getAttribute("dir"), "rtl");
+  assert.equal(await page.locator('textarea[name="message"]').inputValue(), "keep my draft");
+  assert.deepEqual(await mutationCalls(), beforeLocalization);
+  assert.equal(await root.evaluate((element) => getComputedStyle(element).borderColor), "rgb(128, 64, 192)");
+  assert.equal(await page.evaluate(() => window.fixture.styles.roots.size), 1);
+  assert.equal(await page.evaluate(() => window.fixture.localization.subscribers), 1);
+  await page.evaluate(() => window.fixture.localization.change("en", "en-US", {}));
+  await page.getByRole("heading", { name: "Subagents", exact: true }).waitFor();
+
   // Hidden lifecycle pauses observation, not graph/execution state.
   await page.evaluate(() => {
     Object.defineProperty(document, "visibilityState", { configurable: true, value: "hidden" });
@@ -391,6 +441,8 @@ try {
   await page.waitForTimeout(2200);
   assert.equal(await page.evaluate(() => window.fixture.calls.length), calls);
   assert.equal(await page.evaluate(() => window.fixture.subscribed), false);
+  assert.equal(await page.evaluate(() => window.fixture.styles.roots.size), 0);
+  assert.equal(await page.evaluate(() => window.fixture.localization.subscribers), 0);
   assert.deepEqual(errors, []);
   assert.ok(
     (await page.evaluate(() => window.fixture.actions)).includes("Open Subagents"),
@@ -415,6 +467,9 @@ try {
       "non-secure HTTP activation contributes Open Subagents",
       "real controller request IDs are distinct UUID v4 values; replies correlate",
       "mount handshake/status",
+      "batched visibility transitions use the latest observation",
+      "live translated labels, RTL and theme tokens preserve draft/selection without execution",
+      "stylesheet/localization registrations release on unmount",
       "escaped output",
       "stop requires confirmation",
       "cancel/confirm focus",

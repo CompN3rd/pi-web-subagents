@@ -6,6 +6,22 @@ import {
   snapshot,
   graphSnapshot,
 } from "../../test/browser-fixtures.ts";
+import { localizationFixture, stylesheetFixture } from "../host-fixtures.ts";
+// Retain the real observer while allowing deterministic batched-transition tests.
+const NativeIntersectionObserver = globalThis.IntersectionObserver;
+let observed: { callback: IntersectionObserverCallback; observer: IntersectionObserver; target: Element } | undefined;
+globalThis.IntersectionObserver = class extends NativeIntersectionObserver {
+  constructor(callback: IntersectionObserverCallback, options?: IntersectionObserverInit) {
+    super(callback, options);
+    const observe = this.observe.bind(this);
+    this.observe = (target) => {
+      observed = { callback, observer: this, target };
+      observe(target);
+    };
+  }
+};
+const localization = localizationFixture();
+const styles = stylesheetFixture();
 const calls: any[] = [];
 let listener: any;
 let fail = false;
@@ -43,7 +59,8 @@ const lifetime = new AbortController();
 const container = document.createElement("div");
 document.body.append(container);
 const result = plugin.activate({
-  apiVersion: 4,
+  apiVersion: 5,
+  localization: localization.service,
   pluginId: "fixture",
   runtimePluginId: "fixture",
   signal: new AbortController().signal,
@@ -60,14 +77,24 @@ const result = plugin.activate({
   html: null as any,
   svg: null as any,
 });
+result.start({ capabilities: { resolve: () => styles.service }, signal: lifetime.signal });
 render(result.contributions.workspacePanels![0]!.render(context), container);
 Object.assign(window, {
   fixture: {
     actions: result.contributions.actions!.map((action) => action.title),
     calls,
+    localization,
+    styles,
     chips,
     navigation,
     context,
+    batchVisibility(visible: boolean) {
+      if (!observed) throw new Error("Panel did not observe visibility");
+      observed.callback([
+        { target: observed.target, isIntersecting: !visible },
+        { target: observed.target, isIntersecting: visible },
+      ] as IntersectionObserverEntry[], observed.observer);
+    },
     setGraph(mode: "graph" | "empty" | "unavailable") {
       status = mode === "unavailable" ? {} : graphSnapshot();
       if (mode === "empty") {

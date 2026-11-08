@@ -75,12 +75,12 @@ class TestPanel extends SubagentsPanel {
 test("panel overview reports omitted/unavailable projections; only top-level IDs selectable", () => {
   const controller = new SubagentsController(() => {});
   const empty = parts(overview(controller.state, () => {}, ""));
-  assert.match(empty.markup, /Fleet projection unavailable/);
-  assert.match(empty.markup, /Async run projection unavailable/);
+  assert.match(empty.text, /Fleet projection unavailable/);
+  assert.match(empty.text, /Async run projection unavailable/);
   controller.state.status = snapshot() as StatusData;
   const content = parts(overview(controller.state, () => {}, "run-1"));
-  assert.match(content.markup, /fleet entries omitted/);
-  assert.match(content.markup, /Bounded snapshot/);
+  assert.match(content.text, /fleet entries omitted/);
+  assert.match(content.text, /Bounded snapshot/);
   const tree = parts(
     runTree(controller.state.status.asyncSnapshot!.runs, () => {}, "run-1"),
   );
@@ -92,24 +92,24 @@ test("overview combines the graph and collapsed unlinked activity in one section
   controller.state.status = snapshot() as StatusData;
   const content = parts(overview(controller.state, () => {}, ""));
   assert.equal((content.markup.match(/<section\b/g) ?? []).length, 1);
-  assert.match(content.markup, /Agents & runs/);
+  assert.match(content.text, /Agents & runs/);
   assert.match(content.markup, /<details class="unlinked-agents">/);
-  assert.match(content.markup, /Further reported agents/);
-  assert.match(content.markup, /fleet entries omitted/);
-  assert.match(content.markup, /Bounded snapshot/);
+  assert.match(content.text, /Further reported agents/);
+  assert.match(content.text, /fleet entries omitted/);
+  assert.match(content.text, /Bounded snapshot/);
 });
 test("panel does not present zero or missing capacity as a finite zero-slot limit", () => {
   const controller = new SubagentsController(() => {});
   controller.state.status = snapshot(true) as StatusData;
   const fleet = controller.state.status.fleet!;
   fleet.topLevelAsyncCapacity = { used: 0, limit: 0 };
-  assert.match(parts(overview(controller.state, () => {}, "")).markup, /no finite limit reported/);
+  assert.match(parts(overview(controller.state, () => {}, "")).text, /no finite limit reported/);
   fleet.topLevelAsyncCapacity = { used: 2, limit: 4 };
   const finite = parts(overview(controller.state, () => {}, ""));
-  assert.doesNotMatch(finite.markup, /no finite limit reported/);
-  assert.match(finite.markup, /Async capacity/);
+  assert.doesNotMatch(finite.text, /no finite limit reported/);
+  assert.match(finite.text, /Async capacity/);
   delete fleet.topLevelAsyncCapacity;
-  assert.doesNotMatch(parts(overview(controller.state, () => {}, "")).markup, /Async capacity/);
+  assert.doesNotMatch(parts(overview(controller.state, () => {}, "")).text, /Async capacity/);
 });
 test("panel untrusted output stays in escaped Lit value slots, never markup", () => {
   const malicious = '<img src=x onerror="alert(1)"><script>evil()</script>';
@@ -148,7 +148,7 @@ test("panel template has accessible labels, errors, receipts and full operation 
     "Stop run",
     "Interrupt run",
   ])
-    assert.ok(result.markup.includes(expected), expected);
+    assert.ok((result.markup + result.text).includes(expected), expected);
   assert.match(result.markup, /<label\s*>.*<input/s);
   assert.match(result.markup, /<label\s*>.*<textarea/s);
   assert.ok(
@@ -164,7 +164,7 @@ test("run controls require a current root and use its escaped label", () => {
   root.label = "<img src=x> Example run";
   (panel as unknown as { selected: string }).selected = root.id;
   const content = parts(panel.template());
-  assert.match(content.markup, /Details & controls/);
+  assert.match(content.text, /Details & controls/);
   assert.ok(content.text.includes(root.label));
   assert.ok(!content.markup.includes(root.label));
   panel.controller.state.status.asyncSnapshot!.runs = [];
@@ -198,7 +198,7 @@ test("panel timestamps are explicit cached snapshots and unresolved cost is a lo
   panel.controller.state.costAt = 1700000000000;
   const result = parts(panel.template());
   assert.match(result.text, /lower bound; 2 unresolved/);
-  assert.match(result.markup, /Cached calculation at/);
+  assert.match(result.text, /Cached calculation at/);
 });
 test("panel rendering does not perform peer IO", async () => {
   let calls = 0;
@@ -211,7 +211,7 @@ test("panel rendering does not perform peer IO", async () => {
   await tick();
   assert.equal(calls, 0);
 });
-test("browser plugin API4 local panel and runtime-qualified action; contribution render pure", async () => {
+test("browser plugin API5 local panel and runtime-qualified action; contribution render pure", async () => {
   const original = globalThis.customElements;
   let registered = 0;
   Object.defineProperty(globalThis, "customElements", {
@@ -229,7 +229,7 @@ test("browser plugin API4 local panel and runtime-qualified action; contribution
       runtimePluginId: "remote-runtime",
       lifetimeSignal: new AbortController().signal,
     } as Parameters<typeof plugin.activate>[0]);
-    assert.equal(plugin.apiVersion, 4);
+    assert.equal(plugin.apiVersion, 5);
     assert.equal(registered, 1);
     assert.equal(activation.contributions.workspacePanels[0]!.id, "subagents");
     let selected = "";
@@ -387,7 +387,7 @@ test("graph forest preserves ancestry, duplicate occurrences and root-only callb
   assert.equal((content.markup.match(/<ul/g) ?? []).length, 6);
   assert.ok(content.text.includes("grandchild"));
   assert.ok(content.text.includes("paused"));
-  assert.ok(content.markup.includes("Selected"));
+  assert.ok(content.text.includes("Selected"));
   assert.doesNotMatch(content.markup, /role="(?:tree|treeitem)"|<canvas|unsafeHTML/);
   assert.equal(new Set(graphOccurrences(roots).map((entry) => entry.key)).size, roots.length);
   assert.equal(new Set(graphOccurrences(roots[0]!.children!).map((entry) => entry.key)).size, 8);
@@ -439,10 +439,10 @@ test("graph disclosure counts all nodes, defaults closed above eight and keeps w
   controller.state.status = graphSnapshot();
   const content = parts(overview(controller.state, () => {}, ""));
   assert.match(content.markup, /aria-describedby="graph-description"/);
-  assert.match(content.markup, /not execution order/);
-  assert.match(content.markup, /Fleet entries have no reported run relationship/);
-  assert.match(content.markup, /fleet entries omitted/);
-  assert.match(content.markup, /Bounded snapshot/);
+  assert.match(content.text, /not execution order/);
+  assert.match(content.text, /Fleet entries have no reported run relationship/);
+  assert.match(content.text, /fleet entries omitted/);
+  assert.match(content.text, /Bounded snapshot/);
   assert.ok(content.text.includes("byte limit exceeded"));
   assert.ok(content.text.includes("10"));
   assert.ok(content.text.includes(graphHostile));
@@ -450,7 +450,7 @@ test("graph disclosure counts all nodes, defaults closed above eight and keeps w
   assert.ok(content.text.includes("shared-model"));
   assert.ok(content.text.includes("reviewer"));
   assert.ok(content.text.includes("high"));
-  assert.match(content.markup, /Host step details/);
+  assert.match(content.text, /Host step details/);
   for (const count of [8, 9]) {
     const root: AsyncNode = {
       id: "root", label: "root", kind: "workflow", state: "running",
@@ -462,7 +462,7 @@ test("graph disclosure counts all nodes, defaults closed above eight and keeps w
     };
     const disclosure = templates(runTree([root], () => {})).find((template) => template.strings[0]!.includes('class="branch-disclosure"'))!;
     assert.equal(directiveValue(disclosure.values[0]), count <= 8);
-    assert.equal(disclosure.values[1], count);
+    assert.match(String(disclosure.values[1]), new RegExp(`^${count} reported descendants$`));
     assert.equal((parts(runTree([root], () => {})).markup.match(/<article/g) ?? []).length, count + 1);
   }
 });
@@ -470,7 +470,7 @@ test("graph disclosure counts all nodes, defaults closed above eight and keeps w
 test("graph preserves unknown versus empty projections, fallbacks and warning-free present snapshots", () => {
   const controller = new SubagentsController(() => {});
   const unavailable = parts(overview(controller.state, () => {}, ""));
-  assert.doesNotMatch(unavailable.markup, /No async runs in this snapshot/);
+  assert.doesNotMatch(unavailable.text, /No async runs in this snapshot/);
   controller.state.status = snapshot() as StatusData;
   let content = parts(overview(controller.state, () => {}, ""));
   assert.ok(content.text.includes("model unavailable"));
@@ -481,7 +481,7 @@ test("graph preserves unknown versus empty projections, fallbacks and warning-fr
   controller.state.status.asyncSnapshot!.runs = [];
   controller.state.status.asyncSnapshot!.omitted = { runs: 0, children: 0, byteLimitExceeded: false };
   content = parts(overview(controller.state, () => {}, ""));
-  assert.match(content.markup, /No visible fleet entries/);
-  assert.match(content.markup, /No async runs in this snapshot/);
-  assert.doesNotMatch(content.markup, /projection unavailable|Bounded snapshot|fleet entries omitted/);
+  assert.match(content.text, /No visible fleet entries/);
+  assert.match(content.text, /No async runs in this snapshot/);
+  assert.doesNotMatch(content.text, /projection unavailable|Bounded snapshot|fleet entries omitted/);
 });

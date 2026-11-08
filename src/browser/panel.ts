@@ -10,6 +10,7 @@ import { repeat } from "lit/directives/repeat.js";
 import { keyed } from "lit/directives/keyed.js";
 import { guard } from "lit/directives/guard.js";
 import { descendantCount, graphOccurrences } from "./graph.js";
+import { englishContent, type PanelContent } from "./localization.js";
 import type {
   PluginSelectionService,
   WorkspacePanelContext,
@@ -27,15 +28,17 @@ import {
   type PanelState,
 } from "./controller.js";
 
-export function snapshotNotice(state: PanelState): string {
-  if (state.observedAt === undefined) return "No status snapshot yet.";
-  return `${state.stale ? "Stale cached snapshot" : "Last observed snapshot (not a live stream)"} · ${new Date(state.observedAt).toLocaleString()}`;
+export function snapshotNotice(state: PanelState, content = englishContent): string {
+  if (state.observedAt === undefined) return content.t("noSnapshot");
+  return `${content.t(state.stale ? "staleSnapshot" : "lastSnapshot")} · ${content.date(state.observedAt)}`;
 }
 export function runTree(
   nodes: AsyncNode[],
   choose?: (id: string) => void,
   selected = "",
+  content = englishContent,
 ): TemplateResult {
+  const { t } = content;
   // Empty guard dependencies set disclosure defaults once, never overriding native toggles on polls.
   return html`<ul class=${choose ? "tree forest" : "tree branches"}>
     ${repeat(
@@ -51,30 +54,30 @@ export function runTree(
             <div class="run-row">
               ${choose
                 ? html`<button
-                    class="run"
+                    class="ui-button run"
                     aria-pressed=${node.id === selected}
                     @click=${() => choose(node.id)}
                   >${node.label}</button>`
                 : html`<strong>${node.label}</strong>`}
               <span class="pill" data-state=${node.state}>${node.state}</span>
               ${choose && node.id === selected
-                ? html`<span class="selected-label">Selected</span>`
+                ? html`<span class="selected-label">${t("selected")}</span>`
                 : nothing}
             </div>
             <div class="meta">
               ${node.kind} · <code>${node.id}</code>${node.model
                 ? html` · ${node.model}`
-                : nothing}${node.thinking ? html` · thinking: ${node.thinking}` : nothing}${node.agent ? html` · ${node.agent}` : nothing}
+                : nothing}${node.thinking ? html` · ${t("thinking", { value: node.thinking })}` : nothing}${node.agent ? html` · ${node.agent}` : nothing}
             </div>
             ${node.activity
               ? html`<details class="node-details">
-                  <summary>Activity details</summary>
+                  <summary>${t("activity")}</summary>
                   <pre class="activity">${JSON.stringify(node.activity, null, 2)}</pre>
                 </details>`
               : nothing}
             ${node.hostStep
               ? html`<details class="node-details">
-                  <summary>Host step details</summary>
+                  <summary>${t("hostStep")}</summary>
                   <pre>${JSON.stringify(node.hostStep, null, 2)}</pre>
                 </details>`
               : nothing}
@@ -85,9 +88,9 @@ export function runTree(
                 ?open=${guard([], () => descendants <= 8)}
               >
                 <summary>
-                  ${descendants} reported ${descendants === 1 ? "descendant" : "descendants"}
+                  ${t(descendants === 1 ? "descendant" : "descendants", { count: content.number(descendants) })}
                 </summary>
-                ${runTree(node.children!)}
+                ${runTree(node.children!, undefined, "", content)}
               </details>`
             : nothing}
         </li>`;
@@ -99,69 +102,61 @@ export function overview(
   state: PanelState,
   choose: (id: string) => void,
   selected: string,
+  content = englishContent,
 ): TemplateResult {
+  const { t } = content;
   const fleet = state.status?.fleet;
   const snapshot = state.status?.asyncSnapshot;
   return html`<section aria-labelledby="runs-heading" aria-describedby="graph-description">
       <h2 id="runs-heading" tabindex="-1">
-        Agents & runs
+        ${t("runs")}
         <span class="pill"
-          >${fleet ? `${fleet.totalActive} reported active` : "unavailable"}</span
+          >${fleet ? t("reportedActive", { count: content.number(fleet.totalActive) }) : t("unavailable")}</span
         >
       </h2>
       <p class="meta">
-        Reported fleet count is independent of graph nodes. Whole-run controls
-        use only authoritative top-level async run IDs.
+        ${t("fleetNote")}
       </p>
       ${fleet
         ? html`${fleet.topLevelAsyncCapacity
               ? fleet.topLevelAsyncCapacity.limit > 0
                 ? html`<p>
-                    Async capacity: ${fleet.topLevelAsyncCapacity.used} /
-                    ${fleet.topLevelAsyncCapacity.limit}
+                    ${t("capacity", { used: content.number(fleet.topLevelAsyncCapacity.used), limit: content.number(fleet.topLevelAsyncCapacity.limit) })}
                   </p>`
-                : html`<p>Async capacity: no finite limit reported.</p>`
+                : html`<p>${t("unlimited")}</p>`
               : nothing}
             ${fleet.omitted
               ? html`<p class="warning">
-                  ${fleet.omitted} fleet entries omitted.
+                  ${t("omittedFleet", { count: content.number(fleet.omitted) })}
                 </p>`
               : nothing}`
         : html`<p>
-            Fleet projection unavailable. This is not an empty-fleet result.
+            ${t("noFleet")}
           </p>`}
       <p id="graph-description" class="meta">
-        Connections show reported async nesting, not execution order. Nested
-        steps are display-only; no inferred child indices. Branches can be
-        expanded or collapsed in this view; snapshot omissions are reported separately.
+        ${t("graphNote")}
       </p>
       ${snapshot
         ? html`<p class="meta">
-              Generated ${new Date(snapshot.generatedAt).toLocaleString()}.
+              ${t("generated", { date: content.date(snapshot.generatedAt) })}
             </p>
             ${snapshot.omitted.runs ||
             snapshot.omitted.children ||
             snapshot.omitted.byteLimitExceeded
               ? html`<p class="warning">
-                  Bounded snapshot: ${snapshot.omitted.runs} runs /
-                  ${snapshot.omitted.children} children
-                  omitted${snapshot.omitted.byteLimitExceeded
-                    ? " · byte limit exceeded"
-                    : ""}.
+                  ${t("bounded", { runs: content.number(snapshot.omitted.runs), children: content.number(snapshot.omitted.children), bytes: snapshot.omitted.byteLimitExceeded ? t("byteLimit") : "" })}
                 </p>`
               : nothing}
-            ${runTree(snapshot.runs, choose, selected)}${!snapshot.runs.length
-              ? html`<p>No async runs in this snapshot.</p>`
+            ${runTree(snapshot.runs, choose, selected, content)}${!snapshot.runs.length
+              ? html`<p>${t("noRuns")}</p>`
               : nothing}`
         : html`<p>
-            Async run projection unavailable. Controls require an authoritative
-            top-level run.
+            ${t("noProjection")}
           </p>`}
       <details class="unlinked-agents">
-        <summary>Further reported agents${fleet ? ` · ${fleet.entries.length} visible` : " · unavailable"}</summary>
+        <summary>${t("furtherAgents")} · ${fleet ? t("visible", { count: content.number(fleet.entries.length) }) : t("unavailable")}</summary>
       <p class="meta">
-        Fleet entries have no reported run relationship and are display-only.
-        No connections are inferred.
+        ${t("unlinked")}
       </p>
       ${fleet
         ? html`<ul class="fleet">
@@ -171,24 +166,24 @@ export function overview(
                     <strong>${entry.agent}</strong>
                     <span class="meta"
                       >${entry.role ?? ""} ·
-                      ${entry.model ?? "model unavailable"}</span
+                      ${entry.model ?? t("noModel")}</span
                     >
-                    <p>${entry.goal ?? "No goal provided"}</p>
+                    <p>${entry.goal ?? t("noGoal")}</p>
                     <small
-                      >${entry.tokens.total.toLocaleString()} tokens ·
-                      ${entry.effort ?? "effort unavailable"}</small
+                      >${t("tokens", { count: content.number(entry.tokens.total) })} ·
+                      ${entry.effort ?? t("noEffort")}</small
                     >
                   </li>`,
               )}
             </ul>
             ${!fleet.entries.length
-              ? html`<p>No visible fleet entries in this snapshot.</p>`
+              ? html`<p>${t("noEntries")}</p>`
               : nothing}`
-        : html`<p>Fleet projection unavailable.</p>`}
+        : html`<p>${t("fleetUnavailable")}</p>`}
       </details>
       ${state.status?.text
         ? html`<details>
-            <summary>Status summary</summary>
+            <summary>${t("statusSummary")}</summary>
             <pre>${state.status.text}</pre>
           </details>`
         : nothing}
@@ -251,6 +246,7 @@ export class SubagentsPanel extends LitElement {
     selection: { attribute: false },
     lifetime: { attribute: false },
   };
+  content: PanelContent = englishContent;
   declare context: WorkspacePanelContext | undefined;
   declare selection: PluginSelectionService | undefined;
   declare lifetime: AbortSignal | undefined;
@@ -287,8 +283,12 @@ export class SubagentsPanel extends LitElement {
     document.addEventListener("visibilitychange", this.visibility);
     if (typeof IntersectionObserver !== "undefined") {
       this.inViewport = false;
-      this.intersection = new IntersectionObserver(([entry]) => {
-        this.inViewport = entry?.isIntersecting ?? false;
+      this.intersection = new IntersectionObserver((entries) => {
+        // Rapid scrolling/resizing can batch several transitions for this root.
+        // The first entry can be obsolete with no later callback to correct it.
+        const entry = entries.at(-1);
+        if (!entry) return;
+        this.inViewport = entry.isIntersecting;
         this.visibility();
       });
       this.intersection.observe(this);
@@ -462,7 +462,7 @@ export class SubagentsPanel extends LitElement {
       params.context = String(data.get("context"));
       this.operate("spawn", params);
     } catch (error) {
-      this.notice = `Invalid launch arguments: ${String(error)}`;
+      this.notice = this.content.t("invalidLaunch", { error: String(error) });
       this.requestUpdate();
     }
   };
@@ -485,43 +485,44 @@ export class SubagentsPanel extends LitElement {
     this.requestUpdate();
   };
   protected override render(): TemplateResult {
+    const { t } = this.content;
     const state = this.controller.state;
     const selectedRun = state.status?.asyncSnapshot?.runs.find(
       (run) => run.id === this.selected,
     );
     const disabledRun = !selectedRun;
     return html`<main
-      aria-label="Subagents supervision"
+      aria-label=${t("supervision")}
+      dir=${this.content.localization?.direction ?? "ltr"}
       aria-busy=${state.refreshing || state.busy}
     >
       <header>
         <div>
-          <p class="eyebrow">DELEGATION · SUPERVISION</p>
-          <h1 tabindex="-1">Subagents</h1>
+          <p class="eyebrow">${t("eyebrow")}</p>
+          <h1 tabindex="-1">${t("title")}</h1>
         </div>
-        <button
+        <button class="ui-button"
           ?disabled=${!this.controller.available || state.refreshing}
           @click=${() => {
             this.sync();
             void this.controller.refresh();
           }}
         >
-          ${state.refreshing ? "Refreshing…" : "Refresh status"}
+          ${t(state.refreshing ? "refreshing" : "refresh")}
         </button>
       </header>
       <p class="scope">
         ${state.scope
           ? `${state.scope.machineId} / ${state.scope.projectId} / ${state.scope.workspaceId} / ${state.scope.sessionId}`
-          : "No ready conversation selected"}
+          : t("noSelection")}
       </p>
       <p class=${state.stale ? "warning" : "meta"} role="status">
-        ${snapshotNotice(state)}
+        ${snapshotNotice(state, this.content)}
       </p>
       <p class="meta">
         ${state.ping?.events.jobsChanged === "subagent:jobs-changed"
-          ? "Event-driven refresh with a 5s reconciliation interval."
-          : "Visible polling: 2s active / 10s idle."} Hidden or closed panels pause
-        observation, not execution.
+          ? t("events")
+          : t("polling")} ${t("hidden")}
       </p>
       ${state.error
         ? html`<p class="error" role="alert">${state.error}</p>`
@@ -530,25 +531,23 @@ export class SubagentsPanel extends LitElement {
         ? html`<p class="notice" role="status">${this.notice}</p>`
         : nothing}
       <details>
-        <summary>Capabilities & boundaries</summary>
+        <summary>${t("capabilities")}</summary>
         <p>
           ${state.ping
-            ? `Advertised methods: ${state.ping.methods.join(", ")}`
-            : "Capabilities unavailable until a successful handshake."}
+            ? t("methods", { methods: state.ping.methods.join(", ") })
+            : t("noCapabilities")}
         </p>
         ${state.ping
           ? html`<pre>${JSON.stringify(state.ping.capabilities, null, 2)}</pre>`
           : nothing}
         <p>
-          Disabled actions require a ready selection and advertised capability.
-          Child controls, direct supervisor reply cards, general configuration
-          editors, and full transcript streaming are unavailable.
+          ${t("boundaries")}
         </p>
       </details>
-      ${keyed(this.formScope, overview(state, this.choose, this.selected))}
+      ${keyed(this.formScope, overview(state, this.choose, this.selected, this.content))}
       ${selectedRun ? keyed(JSON.stringify([this.formScope, this.selected]), html`<section aria-labelledby="control-heading">
-        <h2 id="control-heading">${selectedRun.label} — Details & controls</h2>
-        <p>Whole-run target: <code>${this.selected}</code></p>
+        <h2 id="control-heading">${selectedRun.label} — ${t("controls")}</h2>
+        <p>${t("target")} <code>${this.selected}</code></p>
         <form
           @submit=${(event: Event) => {
             const data = this.form(event);
@@ -560,7 +559,7 @@ export class SubagentsPanel extends LitElement {
           }}
         >
           <label
-            >Transcript lines
+            >${t("lines")}
             <input
               name="lines"
               type="number"
@@ -569,27 +568,27 @@ export class SubagentsPanel extends LitElement {
               value="80"
               required
           /></label>
-          <button
+          <button class="ui-button"
             ?disabled=${disabledRun ||
             !this.supports("status") ||
             state.refreshing}
           >
-            Load transcript
+            ${t("loadTranscript")}
           </button>
         </form>
         <div class="actions">
-          <button
+          <button class="ui-button"
             ?disabled=${disabledRun || !this.supports("interrupt")}
             @click=${() => this.operate("interrupt", { id: this.selected })}
           >
-            Interrupt run…
+            ${t("interrupt")}
           </button>
           <button
-            class="danger"
+            class="ui-button danger"
             ?disabled=${disabledRun || !this.supports("stop")}
             @click=${() => this.operate("stop", { id: this.selected })}
           >
-            Stop run…
+            ${t("stop")}
           </button>
         </div>
         <form
@@ -604,52 +603,51 @@ export class SubagentsPanel extends LitElement {
           }}
         >
           <label
-            >Message to run
+            >${t("message")}
             <textarea
               name="message"
               required
               maxlength="16384"
               rows="3"
-              placeholder="A focused instruction or resume message"
+              placeholder=${t("messagePlaceholder")}
             ></textarea>
           </label>
           <div class="actions">
             <label
-              >Action
-              <select name="action">
-                <option value="steer">Steer (never revives)</option>
-                <option value="resume">Resume saved contract…</option>
+              >${t("action")}
+              <select class="ui-select" name="action">
+                <option value="steer">${t("steerNever")}</option>
+                <option value="resume">${t("resume")}</option>
               </select></label
             >
             <label
-              >Steering mode
-              <select name="mode">
-                <option value="auto">Auto</option>
-                <option value="steer">Steer</option>
-                <option value="follow_up">Follow-up</option>
+              >${t("steeringMode")}
+              <select class="ui-select" name="mode">
+                <option value="auto">${t("auto")}</option>
+                <option value="steer">${t("steer")}</option>
+                <option value="follow_up">${t("followUp")}</option>
               </select></label
             >
-            <button
+            <button class="ui-button"
               ?disabled=${disabledRun ||
               (!this.supports("steer") && !this.supports("resume"))}
             >
-              Review / send message
+              ${t("send")}
             </button>
           </div>
         </form>
         <p class="meta">
-          Resume uses the saved launch contract. Stop returns “stopping”, not
-          terminal proof. Queued or delivered steering is not completion.
+          ${t("controlNote")}
         </p>
         ${state.transcript && state.transcriptId === this.selected
-          ? html`<h3>Targeted output · ${state.transcriptId}</h3>
-              <p class="meta">Last explicit read; not a live transcript.</p>
-              <pre tabindex="0" aria-label="Targeted run output">
+          ? html`<h3>${t("targetedOutput")} · ${state.transcriptId}</h3>
+              <p class="meta">${t("lastRead")}</p>
+              <pre tabindex="0" aria-label=${t("outputLabel")}>
 ${state.transcript.text}</pre
               >
               ${state.transcript.details
                 ? html`<details>
-                    <summary>Targeted status evidence</summary>
+                    <summary>${t("evidence")}</summary>
                     <pre>
 ${JSON.stringify(state.transcript.details, null, 2)}</pre
                     >
@@ -658,20 +656,20 @@ ${JSON.stringify(state.transcript.details, null, 2)}</pre
           : nothing}
       </section>`) : nothing}
       <section>
-        <h2>Launch async work</h2>
+        <h2>${t("launch")}</h2>
         <details>
-          <summary>New agent, script, or workflow</summary>
+          <summary>${t("newWork")}</summary>
           <form @submit=${this.launch}>
             <label
-              >Launch type
-              <select name="kind">
-                <option value="agent">Configured agent</option>
-                <option value="script">Script</option>
-                <option value="workflow">Workflow name / path</option>
+              >${t("launchType")}
+              <select class="ui-select" name="kind">
+                <option value="agent">${t("configuredAgent")}</option>
+                <option value="script">${t("script")}</option>
+                <option value="workflow">${t("workflow")}</option>
               </select></label
             >
             <label
-              >Agent name, script, or workflow
+              >${t("source")}
               <textarea
                 name="source"
                 rows="2"
@@ -680,42 +678,41 @@ ${JSON.stringify(state.transcript.details, null, 2)}</pre
               ></textarea>
             </label>
             <label
-              >Agent task (agent only)
+              >${t("task")}
               <textarea name="task" rows="3" maxlength="32768"></textarea>
             </label>
             <label
-              >Arguments (script/workflow only, JSON object)
+              >${t("args")}
               <textarea name="args" rows="2" placeholder="{}"></textarea>
             </label>
             <div class="actions">
               <label
-                >Context
-                <select name="context">
-                  <option value="fresh">Fresh</option>
-                  <option value="fork">Fork</option>
+                >${t("context")}
+                <select class="ui-select" name="context">
+                  <option value="fresh">${t("fresh")}</option>
+                  <option value="fork">${t("fork")}</option>
                 </select></label
               >
               <label
-                >Model (optional) <input name="model" maxlength="256" /></label
+                >${t("model")} <input name="model" maxlength="256" /></label
               ><label
-                >Label (optional) <input name="label" maxlength="160"
+                >${t("label")} <input name="label" maxlength="160"
               /></label>
             </div>
             <p class="meta">
-              Async-only. No cwd, output paths, tools, clarification, or other
-              advanced parameters. Upstream owns execution.
+              ${t("launchNote")}
             </p>
-            <button ?disabled=${!this.supports("spawn")}>Review launch…</button>
+            <button class="ui-button" ?disabled=${!this.supports("spawn")}>${t("reviewLaunch")}</button>
           </form>
         </details>
       </section>
       <section>
-        <h2>Schedules</h2>
-        <button
+        <h2>${t("schedules")}</h2>
+        <button class="ui-button"
           ?disabled=${!this.supports("manage", "schedule.list")}
           @click=${() => this.operate("manage", { action: "schedule.list" })}
         >
-          List schedules
+          ${t("listSchedules")}
         </button>
         <form
           @submit=${(event: Event) => {
@@ -727,11 +724,11 @@ ${JSON.stringify(state.transcript.details, null, 2)}</pre
           }}
         >
           <label
-            >Exact schedule ID <input name="id" required maxlength="64"
+            >${t("scheduleId")} <input name="id" required maxlength="64"
           /></label>
           <label
-            >Schedule action
-            <select name="action">
+            >${t("scheduleAction")}
+            <select class="ui-select" name="action">
               ${MANAGEMENT_ACTIONS.filter((a) => a !== "schedule.list").map(
                 (action) =>
                   html`<option
@@ -743,15 +740,15 @@ ${JSON.stringify(state.transcript.details, null, 2)}</pre
               )}
             </select></label
           >
-          <button ?disabled=${!this.supports("manage")}>
-            Review / execute schedule action
+          <button class="ui-button" ?disabled=${!this.supports("manage")}>
+            ${t("scheduleExecute")}
           </button>
         </form>
         ${state.schedules
           ? html`<p class="meta">
-                Last successful schedule output (cached; refresh explicitly).
+                ${t("scheduleCached")}
               </p>
-              <pre tabindex="0" aria-label="Schedule output">
+              <pre tabindex="0" aria-label=${t("scheduleOutput")}>
 ${state.schedules.text}</pre
               >
               ${state.schedules.details?.schedules
@@ -760,58 +757,51 @@ ${JSON.stringify(state.schedules.details.schedules, null, 2)}</pre
                   >`
                 : nothing}`
           : html`<p>
-              Schedules not loaded. Creation is available only through upstream
-              administration.
+              ${t("schedulesNotLoaded")}
             </p>`}
       </section>
       <section>
-        <h2>Cost <span class="pill">on demand</span></h2>
-        <button
+        <h2>${t("cost")} <span class="pill">${t("onDemand")}</span></h2>
+        <button class="ui-button"
           ?disabled=${!this.supports("cost")}
           @click=${() => {
             this.sync();
             void this.controller.perform("cost");
           }}
         >
-          Calculate cost
+          ${t("calculate")}
         </button>
         ${state.cost
           ? html`<p>
-                Cached calculation at
-                ${new Date(state.costAt!).toLocaleString()} —
-                ${state.cost.unresolvedAsyncChildren
-                  ? `lower bound; ${state.cost.unresolvedAsyncChildren} unresolved async children`
-                  : "no unresolved async children reported"}.
+                ${t("cachedCost", { date: this.content.date(state.costAt!), status: state.cost.unresolvedAsyncChildren ? t("lowerBound", { count: this.content.number(state.cost.unresolvedAsyncChildren) }) : t("noUnresolved") })}
               </p>
               <p class="total">
-                $${state.cost.total.cost.toFixed(4)}
-                <span class="meta">total reported cost</span>
+                ${this.content.cost(state.cost.total.cost)}
+                <span class="meta">${t("totalCost")}</span>
               </p>
               <p>
-                Parent $${state.cost.parent.cost.toFixed(4)} · Children
-                $${state.cost.childTotal.cost.toFixed(4)}
+                ${t("parentChildren", { parent: this.content.cost(state.cost.parent.cost), children: this.content.cost(state.cost.childTotal.cost) })}
               </p>
               <ul>
                 ${state.cost.children.map(
                   (child) =>
                     html`<li>
-                      ${child.label} · $${child.usage.cost.toFixed(4)}
+                      ${child.label} · ${this.content.cost(child.usage.cost)}
                       <span class="meta"
                         >${child.runId ??
-                        "identity unavailable (display-only)"}</span
+                        t("noIdentity")}</span
                       >
                     </li>`,
                 )}
               </ul>`
           : html`<p>
-              No cost calculation requested. Cost is never timer-polled.
+              ${t("noCost")}
             </p>`}
       </section>
       <section>
-        <h2>Request receipts</h2>
+        <h2>${t("receipts")}</h2>
         <p class="meta">
-          Last 20 in this mounted panel's memory. Save request IDs before
-          leaving. Transport loss never retries a mutation; work may continue.
+          ${t("receiptsNote")}
         </p>
         <ul class="receipts">
           ${this.controller.currentReceipts.map(
@@ -822,12 +812,12 @@ ${JSON.stringify(state.schedules.details.schedules, null, 2)}</pre
                 <p>${receipt.message}</p>
                 ${receipt.details
                   ? html`<details>
-                      <summary>Receipt identities & evidence</summary>
+                      <summary>${t("receiptEvidence")}</summary>
                       <pre>${JSON.stringify(receipt.details, null, 2)}</pre>
                     </details>`
                   : nothing}
                 ${receipt.method === "spawn" && receipt.state === "unknown"
-                  ? html`<button
+                  ? html`<button class="ui-button"
                         ?disabled=${!this.supports("status") ||
                         state.refreshing}
                         @click=${() => {
@@ -835,11 +825,10 @@ ${JSON.stringify(state.schedules.details.schedules, null, 2)}</pre
                           void this.controller.recoverSpawn(receipt.requestId);
                         }}
                       >
-                        Inspect spawn correlation (read only)
+                        ${t("inspectSpawn")}
                       </button>
                       <p class="meta">
-                        Queries rpc-spawn-${receipt.requestId}. Missing evidence
-                        is not permission to resend.
+                        ${t("correlationNote", { id: `rpc-spawn-${receipt.requestId}` })}
                       </p>`
                   : nothing}
               </li>`,
@@ -847,61 +836,50 @@ ${JSON.stringify(state.schedules.details.schedules, null, 2)}</pre
         </ul>
       </section>
       <section>
-        <h2>Parent conversation & administration</h2>
+        <h2>${t("administration")}</h2>
         <p>
-          Supervisor pending counts and direct reply cards are unavailable.
-          Prepare an ordinary parent message asking its existing tool to inspect
-          requests, then review and manually Send. No answered state is
-          inferred.
+          ${t("supervisorNote")}
         </p>
-        <button
+        <button class="ui-button"
           ?disabled=${!state.scope}
           @click=${() => {
             void this.helper("supervisor");
           }}
         >
-          Prepare supervisor-help message
+          ${t("supervisorHelp")}
         </button>
         <p>
-          General administration fallback: use <code>/subagents</code> in the
-          parent composer for configuration, agents, model/thinking selection,
-          and schedule creation (if slash commands are enabled). Otherwise ask
-          the parent agent to use its existing subagent administration tools.
-          This panel implements only schedule RPC
-          management; custom editors are unavailable. Remove all composer chips
-          before sending /subagents: chips turn it into an ordinary prompt.
+          ${t("adminNote")}
         </p>
-        <button
+        <button class="ui-button"
           ?disabled=${!state.scope}
           @click=${() => {
             void this.helper("admin");
           }}
         >
-          Prepare /subagents command (manual send)
+          ${t("prepareCommand")}
         </button>
       </section>
       ${this.confirmation
         ? html`<section
             class="confirmation"
             role="region"
-            aria-label="Confirm operation"
+            aria-label=${t("confirmLabel")}
             tabindex="-1"
           >
-            <h2>Confirm ${this.confirmation.method}</h2>
+            <h2>${t("confirm", { method: this.confirmation.method })}</h2>
             <p>
-              This changes work in ${this.controller.state.scope?.sessionId}.
-              Review the exact request. Cancellation after sending cannot roll
-              it back.
+              ${t("confirmNote", { session: this.controller.state.scope?.sessionId ?? "" })}
             </p>
             <pre>${JSON.stringify(this.confirmation.params, null, 2)}</pre>
             <button
-              class="danger"
+              class="ui-button danger"
               ?disabled=${state.busy || !this.controller.available}
               @click=${this.confirm}
             >
-              Confirm ${this.confirmation.method}
+              ${t("confirm", { method: this.confirmation.method })}
             </button>
-            <button @click=${this.cancel}>Cancel</button>
+            <button class="ui-button" @click=${this.cancel}>${t("cancel")}</button>
           </section>`
         : nothing}
     </main>`;
@@ -909,11 +887,8 @@ ${JSON.stringify(state.schedules.details.schedules, null, 2)}</pre
   static override styles = css`
     :host {
       display: block;
-      color: inherit;
-      font:
-        14px/1.5 system-ui,
-        sans-serif;
-      color-scheme: light dark;
+      color: var(--pi-text, inherit);
+      font: 14px/1.5 var(--pi-font, system-ui, sans-serif);
     }
     * {
       box-sizing: border-box;
@@ -953,7 +928,7 @@ ${JSON.stringify(state.schedules.details.schedules, null, 2)}</pre
       opacity: 0.7;
     }
     section {
-      border-top: 1px solid #8885;
+      border-top: 1px solid var(--pi-border, #8885);
       margin-top: 22px;
       padding-top: 18px;
     }
@@ -970,27 +945,14 @@ ${JSON.stringify(state.schedules.details.schedules, null, 2)}</pre
     code {
       overflow-wrap: anywhere;
     }
-    button,
     input,
-    textarea,
-    select {
+    textarea {
       font: inherit;
-      border: 1px solid #8888;
+      border: 1px solid var(--pi-border, #8888);
       border-radius: 6px;
       padding: 7px 10px;
-      color: inherit;
-      background: transparent;
-    }
-    button {
-      cursor: pointer;
-      min-height: 36px;
-    }
-    button:hover:not(:disabled) {
-      background: #8882;
-    }
-    button:disabled {
-      opacity: 0.45;
-      cursor: not-allowed;
+      color: var(--pi-text, inherit);
+      background: var(--pi-surface, transparent);
     }
     button:focus-visible,
     input:focus-visible,
@@ -998,15 +960,15 @@ ${JSON.stringify(state.schedules.details.schedules, null, 2)}</pre
     select:focus-visible,
     summary:focus-visible,
     pre:focus-visible {
-      outline: 3px solid #638ff1;
+      outline: 3px solid var(--pi-accent, Highlight);
       outline-offset: 3px;
     }
     .run[aria-pressed="true"] {
-      border-color: #638ff1;
-      background: #638ff122;
+      border-color: var(--pi-accent, Highlight);
+      background: color-mix(in srgb, var(--pi-accent, Highlight) 13%, transparent);
     }
     .danger {
-      border-color: #dc756d;
+      border-color: var(--pi-danger, #dc756d);
     }
     label {
       display: flex;
@@ -1039,11 +1001,9 @@ ${JSON.stringify(state.schedules.details.schedules, null, 2)}</pre
       max-height: 420px;
       overflow: auto;
       padding: 12px;
-      background: #8881;
+      background: var(--pi-surface, #8881);
       border-radius: 6px;
-      font:
-        12px/1.6 ui-monospace,
-        monospace;
+      font: 12px/1.6 var(--pi-mono, ui-monospace, monospace);
     }
     .activity {
       max-height: 100px;
@@ -1070,17 +1030,17 @@ ${JSON.stringify(state.schedules.details.schedules, null, 2)}</pre
     }
     .node-card {
       padding: 12px;
-      border: 1px solid #8886;
+      border: 1px solid var(--pi-border, #8886);
       border-radius: 8px;
-      background: #8881;
+      background: var(--pi-surface, #8881);
       min-inline-size: 0;
     }
     .graph-root > .node-card {
       border-width: 2px;
     }
     .node-card[data-selected="true"] {
-      border-color: #638ff1;
-      background: #638ff112;
+      border-color: var(--pi-accent, Highlight);
+      background: color-mix(in srgb, var(--pi-accent, Highlight) 7%, transparent);
     }
     .selected-label {
       font-size: 12px;
@@ -1106,7 +1066,7 @@ ${JSON.stringify(state.schedules.details.schedules, null, 2)}</pre
     .branches {
       margin: 0;
       padding-inline-start: 18px;
-      border-inline-start: 1px solid #8888;
+      border-inline-start: 1px solid var(--pi-border, #8888);
     }
     .branches > li {
       position: relative;
@@ -1118,7 +1078,7 @@ ${JSON.stringify(state.schedules.details.schedules, null, 2)}</pre
       inset-inline-start: -18px;
       inset-block-start: 26px;
       inline-size: 18px;
-      border-block-start: 1px solid #8888;
+      border-block-start: 1px solid var(--pi-border, #8888);
     }
     @media (forced-colors: active) {
       .node-card[data-selected="true"] {
@@ -1135,7 +1095,7 @@ ${JSON.stringify(state.schedules.details.schedules, null, 2)}</pre
     .fleet > li,
     .receipts > li {
       padding: 12px;
-      border: 1px solid #8884;
+      border: 1px solid var(--pi-border, #8884);
       border-radius: 8px;
     }
     .receipts code {
@@ -1143,7 +1103,7 @@ ${JSON.stringify(state.schedules.details.schedules, null, 2)}</pre
       font-size: 12px;
     }
     .pill {
-      border: 1px solid #8885;
+      border: 1px solid var(--pi-border, #8885);
       border-radius: 20px;
       padding: 2px 8px;
       font-size: 11px;
@@ -1151,28 +1111,28 @@ ${JSON.stringify(state.schedules.details.schedules, null, 2)}</pre
     }
     [data-state="running"],
     [data-state="queued"] {
-      border-color: #638ff1;
+      border-color: var(--pi-accent, Highlight);
     }
     [data-state="failed"],
     [data-state="rejected"] {
-      border-color: #dc756d;
+      border-color: var(--pi-danger, #dc756d);
     }
     .warning,
     .error,
     .notice {
-      border-left: 3px solid #bf8c36;
+      border-inline-start: 3px solid var(--pi-warning, #bf8c36);
       padding: 8px 12px;
-      background: #bf8c3610;
+      background: color-mix(in srgb, var(--pi-warning, #bf8c36) 6%, transparent);
     }
     .error {
-      border-color: #dc756d;
+      border-color: var(--pi-danger, #dc756d);
     }
     .confirmation {
       position: sticky;
       bottom: 8px;
       padding: 18px;
-      border: 2px solid #bf8c36;
-      background: Canvas;
+      border: 2px solid var(--pi-warning, #bf8c36);
+      background: var(--pi-surface, Canvas);
       box-shadow: 0 4px 24px #0003;
       border-radius: 10px;
     }

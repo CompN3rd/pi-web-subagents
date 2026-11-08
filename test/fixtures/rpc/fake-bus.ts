@@ -2,7 +2,7 @@ import type {
   PiWebHostPiSessionConnection,
   PiWebHostPiSessionEventsV1,
   PiWebHostPiSessionSelection,
-  ServerPluginPeerRequestContext,
+  ServerPluginPeerRequestContextV5,
 } from "@jmfederico/pi-web/server-plugin-api";
 import { RPC_METHODS, MANAGEMENT_ACTIONS, type RpcInput, type JsonValue } from "../../../src/protocol.ts";
 import { RPC_REPLY_PREFIX } from "../../../src/server/rpc-client.ts";
@@ -105,15 +105,18 @@ export function input(method: RpcInput["method"] = "status", params?: object, re
 export function context(
   value: RpcInput = input(),
   signal = new AbortController().signal,
-): ServerPluginPeerRequestContext {
+): ServerPluginPeerRequestContextV5 & { scope: Extract<ServerPluginPeerRequestContextV5["scope"], { kind: "workspace" }> } {
   return {
-    project: { id: "project-1", name: "project", path: "C:/host" },
-    workspace: {
-      id: "workspace-1",
-      projectId: "project-1",
-      label: "workspace",
-      path: "C:/host/workspace",
-      isMain: true,
+    scope: {
+      kind: "workspace",
+      project: { id: "project-1", name: "project", path: "C:/host" },
+      workspace: {
+        id: "workspace-1",
+        projectId: "project-1",
+        label: "workspace",
+        path: "C:/host/workspace",
+        isMain: true,
+      },
     },
     operation: "rpc",
     input: value as JsonValue,

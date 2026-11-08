@@ -37,7 +37,7 @@ function tarball(extra = [], omit = []) {
 test("validateReleaseInputs accepts independent exact package and lock without installing the engine", async () => {
   const result = await validateReleaseInputs();
   assert.equal(result.manifest.version, manifest.version);
-  assert.equal(result.upstreamLock.host.browserApiVersion, 4);
+  assert.equal(result.upstreamLock.host.browserApiVersion, 5);
 });
 
 test("validateManifest rejects mapping mismatch, broad browser root, runtime installs and lifecycle hooks", () => {

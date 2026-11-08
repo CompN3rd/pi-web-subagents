@@ -1,10 +1,10 @@
 import { PI_WEB_HOST_PI_SESSION_EVENTS_CAPABILITY } from "@jmfederico/pi-web/server-plugin-api";
-import type { PiWebServerPlugin } from "@jmfederico/pi-web/server-plugin-api";
+import type { PiWebServerPluginV5 } from "@jmfederico/pi-web/server-plugin-api";
 import { failure } from "./server/rpc-client.ts";
 import { SessionRelay } from "./server/relay.ts";
 
 const plugin = {
-  apiVersion: 3,
+  apiVersion: 5,
   name: "Subagents",
   requires: [PI_WEB_HOST_PI_SESSION_EVENTS_CAPABILITY],
   activate(host) {
@@ -29,5 +29,5 @@ const plugin = {
       },
     };
   },
-} satisfies PiWebServerPlugin;
+} satisfies PiWebServerPluginV5;
 export default plugin;

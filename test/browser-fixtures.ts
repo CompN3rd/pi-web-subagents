@@ -1,4 +1,4 @@
-import type { WorkspacePanelContext } from "@jmfederico/pi-web/plugin-api";
+import type { WorkspacePanelContextV5 as WorkspacePanelContext } from "@jmfederico/pi-web/plugin-api";
 import {
   MANAGEMENT_ACTIONS,
   RPC_METHODS,
