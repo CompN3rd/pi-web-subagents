@@ -1,5 +1,5 @@
 import { html, nothing, type TemplateResult } from "lit";
-import type { AsyncNode, CostData, Tokens } from "../protocol.js";
+import type { AsyncNode, CostData, JsonObject, Tokens } from "../protocol.js";
 import { englishContent, type PanelContent } from "./localization.js";
 
 type Fact = readonly [string, string | undefined];
@@ -69,6 +69,39 @@ export function fleetMetrics(tokens: Tokens, content = englishContent): Template
     [t("windowTokens"), tokens.window === undefined ? t("unknown") : number(tokens.window)],
     [t("peakTokens"), tokens.windowPeak === undefined ? t("unknown") : number(tokens.windowPeak)],
   ]);
+}
+/** Already bounded by the RPC projection. Trace references are evidence, never control targets. */
+export function workflowTrace(workflow: JsonObject | undefined, content = englishContent): TemplateResult | typeof nothing {
+  if (!workflow) return nothing;
+  const { t } = content;
+  const text = (value: unknown) => typeof value === "string" ? value : undefined;
+  const trace = Array.isArray(workflow.trace) ? workflow.trace : [];
+  return html`<section class="workflow-trace" aria-label=${t("workflowTrace")}>
+    <h3>${t("workflowTrace")}</h3>
+    <p class="meta">${t("traceNote")}</p>
+    ${facts([
+      [t("failureKind"), text(workflow.failureKind)],
+      [t("stopCause"), text(workflow.stopCause)],
+      [t("reusedFrom"), text(workflow.reusedFrom)],
+    ])}
+    <ol>${trace.map((value) => {
+      if (!value || typeof value !== "object" || Array.isArray(value)) return nothing;
+      return html`<li>
+        <strong>${text(value.label) ?? text(value.key) ?? t("unknown")}</strong>
+        <span class="pill">${text(value.state) ?? t("unknown")}</span>
+        ${facts([
+          [t("traceOperation"), text(value.operation)],
+          [t("traceKey"), text(value.key)],
+          [t("tracePhase"), text(value.phase)],
+          [t("traceAgent"), text(value.agent)],
+          [t("traceRun"), text(value.runId)],
+          [t("traceDuration"), durationBetween(0, value.durationMs, content)],
+          [t("traceReuse"), typeof value.reused === "boolean" ? t(value.reused ? "reused" : "notReused") : t("unknown")],
+        ])}
+      </li>`;
+    })}</ol>
+    ${!trace.length ? html`<p>${t("noTrace")}</p>` : nothing}
+  </section>`;
 }
 /** On-demand accounting only; never merge these identities or totals into the fleet. */
 export function usageTable(cost: CostData, content: PanelContent = englishContent): TemplateResult {

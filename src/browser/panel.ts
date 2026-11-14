@@ -11,7 +11,7 @@ import { keyed } from "lit/directives/keyed.js";
 import { guard } from "lit/directives/guard.js";
 import { branchMatches, descendantCount, graphEntries, graphOccurrences, matchesRun, noFilter, type RunFilter } from "./graph.js";
 import { englishContent, type PanelContent } from "./localization.js";
-import { durationBetween, fleetMetrics, nodeFacts, usageTable } from "./presentation.js";
+import { durationBetween, fleetMetrics, nodeFacts, usageTable, workflowTrace } from "./presentation.js";
 import type {
   PluginSelectionService,
   WorkspacePanelContext,
@@ -269,6 +269,9 @@ export class SubagentsPanel extends LitElement {
   private offSelection: (() => void) | undefined;
   private listenedLifetime: AbortSignal | undefined;
   private selected = "";
+  private autoScrollOutput = true;
+  private renderedOutput: PanelState["transcript"];
+  private outputLines = 80;
   private filter: RunFilter = { ...noFilter };
   private confirmation: Confirmation | undefined;
   private notice = "";
@@ -325,6 +328,7 @@ export class SubagentsPanel extends LitElement {
       this.selected = "";
       this.confirmation = undefined;
     }
+    this.controller.selectOutput(this.selectedEntry()?.controlId ?? "");
     const focused = this.shadowRoot?.activeElement;
     this.graphFocus =
       focused instanceof HTMLElement && (focused.closest(".graph-root") || focused.closest(".inspector"))
@@ -341,7 +345,21 @@ export class SubagentsPanel extends LitElement {
     }
     if (changed.has("selection") || changed.has("lifetime")) this.bind();
     if (changed.has("context")) this.sync();
+    const output = this.controller.state.transcript;
+    if (output !== this.renderedOutput) {
+      this.renderedOutput = output;
+      if (this.autoScrollOutput) this.scrollOutputToEnd();
+    }
   }
+  private scrollOutputToEnd(): void {
+    const output = this.renderRoot.querySelector<HTMLElement>(".targeted-output");
+    if (output) output.scrollTop = output.scrollHeight;
+  }
+  private jumpToLatest = (): void => {
+    this.autoScrollOutput = true;
+    this.scrollOutputToEnd();
+    this.requestUpdate();
+  };
   private bind(): void {
     this.offSelection?.();
     this.offSelection = undefined;
@@ -364,6 +382,8 @@ export class SubagentsPanel extends LitElement {
     if (key !== this.formScope) {
       this.formScope = key;
       this.selected = "";
+      this.autoScrollOutput = true;
+      this.outputLines = 80;
       this.filter = { ...noFilter };
       this.confirmation = undefined;
       this.notice = "";
@@ -383,7 +403,9 @@ export class SubagentsPanel extends LitElement {
   private choose = (key: string): void => {
     this.sync();
     if (graphEntries(this.controller.state.status?.asyncSnapshot?.runs ?? []).some((entry) => entry.key === key)) {
+      if (this.selected !== key) this.autoScrollOutput = true;
       this.selected = key;
+      this.controller.selectOutput(this.selectedEntry()?.controlId ?? "");
       this.confirmation = undefined;
       this.requestUpdate();
       void this.updateComplete.then(() => this.renderRoot.querySelector<HTMLElement>("#control-heading")?.focus());
@@ -391,6 +413,7 @@ export class SubagentsPanel extends LitElement {
   };
   private back = (): void => {
     this.selected = "";
+    this.controller.selectOutput("");
     this.confirmation = undefined;
     this.requestUpdate();
     void this.updateComplete.then(() => this.renderRoot.querySelector<HTMLElement>("#runs-heading")?.focus());
@@ -591,11 +614,11 @@ export class SubagentsPanel extends LitElement {
         <form
           @submit=${(event: Event) => {
             const data = this.form(event);
-            this.operate("status", {
-              id: target,
-              view: "transcript",
-              lines: Number(data.get("lines")),
-            });
+            this.sync();
+            if (this.hasRun(target)) {
+              this.outputLines = Number(data.get("lines"));
+              void this.controller.readOutput(this.outputLines);
+            }
           }}
         >
           <label
@@ -605,17 +628,30 @@ export class SubagentsPanel extends LitElement {
               type="number"
               min="1"
               max="500"
-              value="80"
+              .value=${String(this.outputLines)}
+              @change=${(event: Event) => { this.outputLines = Number((event.target as HTMLInputElement).value); }}
               required
           /></label>
           <button class="ui-button"
             ?disabled=${disabledRun ||
             !this.supports("status") ||
-            state.refreshing}
+            state.outputLoading}
           >
             ${t("loadTranscript")}
           </button>
         </form>
+        <div class="actions output-actions">
+          <button class="ui-button" aria-pressed=${state.outputFollowing}
+            ?disabled=${!state.outputFollowing && (disabledRun || !this.supports("status"))}
+            @click=${() => {
+              this.sync();
+              if (state.outputFollowing || this.hasRun(target)) this.controller.setOutputFollowing(!state.outputFollowing, this.outputLines);
+            }}>${t(state.outputFollowing ? "stopFollowing" : "followOutput")}</button>
+          <button class="ui-button" ?disabled=${!state.transcript || state.transcriptId !== target}
+            @click=${this.jumpToLatest}>${t("jumpToLatest")}</button>
+        </div>
+        <p class="meta">${t("followNote")} ${!this.autoScrollOutput ? t("scrollPaused") : ""}</p>
+        ${state.outputError ? html`<p class="error" role="alert">${t("outputReadError", { error: state.outputError })}</p>` : nothing}
         <div class="actions">
           <button class="ui-button"
             ?disabled=${disabledRun || !this.supports("interrupt")}
@@ -681,10 +717,18 @@ export class SubagentsPanel extends LitElement {
         </p>
         ${state.transcript && state.transcriptId === target
           ? html`<h3>${t("targetedOutput")} · ${state.transcriptId}</h3>
-              <p class="meta">${t("lastRead")}</p>
-              <pre tabindex="0" aria-label=${t("outputLabel")}>
-${state.transcript.text}</pre
+              <p class="meta">${t("lastRead")} ${state.transcriptAt === undefined ? "" : this.content.date(state.transcriptAt)} · ${t(state.outputFollowing ? "following" : "notFollowing")}</p>
+              <pre class="targeted-output" tabindex="0" aria-label=${t("outputLabel")}
+                @scroll=${(event: Event) => {
+                  const output = event.currentTarget as HTMLElement;
+                  const atEnd = output.scrollHeight - output.clientHeight - output.scrollTop <= 24;
+                  if (this.autoScrollOutput !== atEnd) {
+                    this.autoScrollOutput = atEnd;
+                    this.requestUpdate();
+                  }
+                }}>${state.transcript.text}</pre
               >
+              ${workflowTrace(state.transcript.details?.workflow, this.content)}
               ${state.transcript.details
                 ? html`<details>
                     <summary>${t("evidence")}</summary>
@@ -1033,6 +1077,8 @@ ${JSON.stringify(state.schedules.details.schedules, null, 2)}</pre
       border-radius: 6px;
       font: 12px/1.6 var(--pi-mono, ui-monospace, monospace);
     }
+    .targeted-output { overflow-anchor: none; scroll-behavior: auto; }
+    .workflow-trace li { padding-block: 8px; border-bottom: 1px solid var(--pi-border, #8885); overflow-wrap: anywhere; }
     .facts {
       display: flex;
       flex-wrap: wrap;

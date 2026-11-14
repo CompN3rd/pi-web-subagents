@@ -63,6 +63,7 @@ try {
       });
     return route.abort();
   });
+  await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto(url);
   const browserCrypto = await page.evaluate(() => ({
     secureContext: isSecureContext,
@@ -93,6 +94,53 @@ try {
   assert.equal(await page.locator("#control-heading").count(), 0);
   await page.locator("button.run").first().click();
   await page.getByRole("heading", { name: /Details & controls/ }).waitFor();
+  // Criterion 4 / B4: selected bounded follow, native scrolling, no background mutation.
+  await page.evaluate(() => window.fixture.setOutput(Array.from({ length: 120 }, (_, i) => `Line ${i} <img src=x onerror="window.evil=true">`).join("\n")));
+  await page.locator('input[name="lines"]').fill("200");
+  await page.getByRole("button", { name: "Load transcript", exact: true }).click();
+  const output = page.getByLabel("Targeted run output", { exact: true });
+  await output.waitFor();
+  await page.waitForFunction(() => {
+    const el = document.querySelector("body>div").firstElementChild.shadowRoot.querySelector(".targeted-output");
+    return el && el.scrollHeight - el.clientHeight - el.scrollTop < 24;
+  });
+  await page.getByRole("heading", { name: "Reported workflow trace", exact: true }).waitFor();
+  assert.equal(await page.locator(".workflow-trace button").count(), 0);
+  assert.match(await page.locator(".workflow-trace").innerText(), /host-check/);
+  assert.match(await page.locator(".workflow-trace").innerText(), /reported-reference/);
+  await page.locator(".inspector").screenshot({ path: join(artifacts, "output-workflow.png") });
+  assert.equal(await output.evaluate((el) => getComputedStyle(el).scrollBehavior), "auto");
+  await page.getByRole("button", { name: "Follow output", exact: true }).click();
+  await page.getByRole("button", { name: "Stop following", exact: true }).waitFor();
+  await output.evaluate((el) => { el.scrollTop = 50; el.dispatchEvent(new Event("scroll")); });
+  await page.getByText(/Auto-scroll paused while inspecting earlier output/).waitFor();
+  await page.evaluate(() => document.querySelector("body>div").firstElementChild.controller.refresh());
+  assert.equal(await output.evaluate((el) => el.scrollTop), 50, "status refresh preserves output DOM and scroll");
+  await page.evaluate(() => window.fixture.setOutput(Array.from({ length: 160 }, (_, i) => `Updated ${i} <img src=x onerror="window.evil=true">`).join("\n")));
+  await page.waitForFunction(() => document.querySelector("body>div").firstElementChild.shadowRoot.querySelector(".targeted-output")?.textContent.includes("Updated 159"));
+  assert.equal(await output.evaluate((el) => el.scrollTop), 50, "follow retains manual output scroll offset");
+  await page.getByRole("button", { name: "Jump to latest", exact: true }).click();
+  assert.ok(await output.evaluate((el) => el.scrollHeight - el.clientHeight - el.scrollTop < 24));
+  await page.evaluate(() => window.fixture.setOutput(Array.from({ length: 180 }, (_, i) => `Latest ${i}`).join("\n")));
+  await page.waitForFunction(() => {
+    const el = document.querySelector("body>div").firstElementChild.shadowRoot.querySelector(".targeted-output");
+    return el?.textContent.includes("Latest 179") && el.scrollHeight - el.clientHeight - el.scrollTop < 24;
+  });
+  assert.ok(await page.evaluate(() => window.fixture.calls.filter((call) => call.method === "status" && call.params?.id).every((call) => call.params.id === "run-1" && call.params.view === "transcript" && call.params.lines === 200)));
+  assert.equal(await page.locator("img").count(), 0);
+  assert.equal(await page.evaluate(() => window.evil), undefined);
+  await page.evaluate(() => window.fixture.batchVisibility(false));
+  assert.equal(await page.evaluate(() => document.querySelector("body>div").firstElementChild.controller.state.outputFollowing), false);
+  const readsWhileHidden = await page.evaluate(() => window.fixture.calls.filter((call) => call.method === "status" && call.params?.id).length);
+  await page.waitForTimeout(2200);
+  assert.equal(await page.evaluate(() => window.fixture.calls.filter((call) => call.method === "status" && call.params?.id).length), readsWhileHidden);
+  await page.evaluate(() => window.fixture.batchVisibility(true));
+  await page.waitForFunction(() => document.querySelector("body>div").firstElementChild.controller.state.ping !== undefined);
+  assert.equal(await page.getByRole("button", { name: "Follow output", exact: true }).getAttribute("aria-pressed"), "false");
+  await page.getByRole("button", { name: "Back to reported runs", exact: true }).click();
+  await page.locator("button.run").first().click();
+  assert.equal(await output.count(), 0, "target change clears output cache and follow");
+  await page.evaluate(() => window.fixture.setOutput(undefined));
   const stop = page.getByRole("button", { name: "Stop entire run…", exact: true });
   await stop.click();
   assert.equal(
@@ -536,6 +584,9 @@ try {
       "live translated labels, RTL and theme tokens preserve draft/selection without execution",
       "stylesheet/localization registrations release on unmount",
       "escaped output",
+      "B4: bounded selected-only follow, scroll-away retention, jump restores auto-scroll, hidden cancels without auto-resume, target change clears output",
+      "A11-A13: readable reported workflow trace, host check operation and read-only references",
+      "reduced-motion emulation; output scroll behavior is immediate, not smooth",
       "A5–A7/A13: progress/age, tool duration, activity, counts and monitor facts visible without JSON",
       "A9: unlinked fleet input/output/spent/window metrics, no control targets",
       "C5: accessible on-demand usage table including caches and turns; no accounting polling",

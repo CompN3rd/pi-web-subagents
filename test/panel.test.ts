@@ -16,7 +16,7 @@ import { branchMatches, descendantCount, graphEntries, graphOccurrences, matches
 import { repeat } from "lit/directives/repeat.js";
 import { keyed } from "lit/directives/keyed.js";
 import { guard } from "lit/directives/guard.js";
-import { durationBetween, fleetMetrics, nodeFacts, usageTable } from "../src/browser/presentation.ts";
+import { durationBetween, fleetMetrics, nodeFacts, usageTable, workflowTrace } from "../src/browser/presentation.ts";
 import { createContent } from "../src/browser/localization.ts";
 import { localizationFixture } from "./host-fixtures.ts";
 
@@ -74,6 +74,23 @@ class TestPanel extends SubagentsPanel {
     return this.render();
   }
 }
+
+test("A11–A13: workflow trace presents reported phases, host operations, reuse, failures and references without controls", () => {
+  const hostile = '<img src=x onerror="evil()">';
+  const rendered = parts(workflowTrace({
+    failureKind: "acceptance", stopCause: "held", reusedFrom: "prior-run",
+    trace: [
+      { operation: "host-check", key: "gate", phase: "acceptance", label: hostile, state: "failed", durationMs: 0, reused: false },
+      { operation: "spawn", key: "worker", phase: "implementation", agent: "worker", runId: "run-reference", state: "complete", durationMs: 12345, reused: true },
+      { key: "missing-facts" },
+    ],
+  }));
+  for (const text of ["acceptance", "host-check", "held", "prior-run", "run-reference", "12s", "0s", "Not reused", "Reused", "unknown", hostile]) assert.ok(rendered.text.includes(text), text);
+  assert.doesNotMatch(rendered.markup, /<button|<img|onerror/);
+  assert.match(rendered.text, /not a complete workflow plan/);
+  assert.match(parts(workflowTrace({})).text, /No trace entries supplied/);
+  assert.equal(parts(workflowTrace(undefined)).text, "");
+});
 
 test("panel overview reports omitted/unavailable projections; nested snapshots selectable", () => {
   const controller = new SubagentsController(() => {});

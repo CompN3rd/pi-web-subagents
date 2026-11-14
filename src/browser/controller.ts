@@ -91,6 +91,10 @@ export interface PanelState {
   error: string;
   transcript: ToolData | undefined;
   transcriptId: string;
+  transcriptAt: number | undefined;
+  outputLoading: boolean;
+  outputFollowing: boolean;
+  outputError: string;
   schedules: ToolData | undefined;
   cost: CostData | undefined;
   costAt: number | undefined;
@@ -106,6 +110,10 @@ const initial = (): PanelState => ({
   error: "Select a ready, non-archived conversation.",
   transcript: undefined,
   transcriptId: "",
+  transcriptAt: undefined,
+  outputLoading: false,
+  outputFollowing: false,
+  outputError: "",
   schedules: undefined,
   cost: undefined,
   costAt: undefined,
@@ -121,6 +129,11 @@ export class SubagentsController {
   private requests = new Set<AbortController>();
   private statusPending = false;
   private watcher: AbortController | undefined;
+  private outputTarget = "";
+  private outputLines = 80;
+  private outputEpoch = 0;
+  private outputTimer: unknown;
+  private outputRequest: AbortController | undefined;
   constructor(
     private readonly changed: () => void,
     private readonly time: Clock = clock,
@@ -169,6 +182,7 @@ export class SubagentsController {
     if (!different) return;
     this.cancel();
     this.state = initial();
+    this.outputTarget = "";
     this.state.scope = scope;
     this.state.error = !scope
       ? "Selection unavailable: choose a ready, non-archived conversation in this workspace."
@@ -195,6 +209,7 @@ export class SubagentsController {
     this.changed();
   }
   private cancel(): void {
+    this.stopOutput();
     this.generation++;
     this.watcher?.abort();
     this.watcher = undefined;
@@ -248,6 +263,7 @@ export class SubagentsController {
         // Re-negotiate on transport failure; never spin on a rejected observation.
         this.state.ping = undefined;
         this.state.stale = true;
+        this.stopOutput();
         this.schedule();
         this.changed();
       }
@@ -255,15 +271,16 @@ export class SubagentsController {
       if (this.watcher === watcher) this.watcher = undefined;
     }
   }
-  private async request(input: RpcInput, observation?: AbortSignal): Promise<RpcReply> {
+  private async request(input: RpcInput, observation?: AbortSignal, cancellation?: AbortSignal): Promise<RpcReply> {
     const peer = this.context?.peer;
     if (!this.available || !peer?.request)
       throw new Error("Selected conversation or package peer unavailable");
     const controller = new AbortController();
     this.requests.add(controller);
     const cancelObservation = () => controller.abort();
-    observation?.addEventListener("abort", cancelObservation, { once: true });
-    if (observation?.aborted) controller.abort();
+    const signal = observation ?? cancellation;
+    signal?.addEventListener("abort", cancelObservation, { once: true });
+    if (signal?.aborted) controller.abort();
     const deadline = this.time.set(() => controller.abort(), 20000);
     let abort: (() => void) | undefined;
     try {
@@ -280,7 +297,7 @@ export class SubagentsController {
       ]);
       return parseRpcReply(raw, input);
     } finally {
-      observation?.removeEventListener("abort", cancelObservation);
+      signal?.removeEventListener("abort", cancelObservation);
       if (abort) controller.signal.removeEventListener("abort", abort);
       this.time.clear(deadline);
       this.requests.delete(controller);
@@ -343,7 +360,86 @@ export class SubagentsController {
       if (generation === this.generation) {
         this.statusPending = false;
         this.state.refreshing = false;
+        if (this.outputTarget && !this.validOutputTarget()) this.stopOutput();
         this.schedule();
+        this.changed();
+      }
+    }
+  }
+  /** Display selection is not authority: revalidate the unique root on every bounded read. */
+  selectOutput(id: string): void {
+    if (id === this.outputTarget) return;
+    this.stopOutput();
+    this.outputTarget = id;
+    this.state.transcript = undefined;
+    this.state.transcriptId = "";
+    this.state.transcriptAt = undefined;
+    this.state.outputError = "";
+    this.changed();
+  }
+  private validOutputTarget(): boolean {
+    return !!this.outputTarget && !this.state.stale && this.supports("status") &&
+      this.state.status?.asyncSnapshot?.runs.filter((run) => run.id === this.outputTarget).length === 1;
+  }
+  private stopOutput(): void {
+    this.outputEpoch++;
+    this.time.clear(this.outputTimer);
+    this.outputTimer = undefined;
+    this.outputRequest?.abort();
+    this.outputRequest = undefined;
+    this.state.outputLoading = false;
+    this.state.outputFollowing = false;
+  }
+  setOutputFollowing(follow: boolean, lines = this.outputLines): void {
+    if (!follow) {
+      this.stopOutput();
+      this.changed();
+      return;
+    }
+    if (!this.validOutputTarget()) return;
+    this.state.outputFollowing = true;
+    void this.readOutput(lines);
+  }
+  /** One selected read at a time; a completed read schedules the next, never a fleet transcript poll. */
+  async readOutput(lines = this.outputLines): Promise<void> {
+    if (this.outputRequest || !this.validOutputTarget()) return;
+    this.time.clear(this.outputTimer);
+    this.outputTimer = undefined;
+    const epoch = ++this.outputEpoch;
+    const request = new AbortController();
+    this.outputRequest = request;
+    this.state.outputLoading = true;
+    this.state.outputError = "";
+    this.changed();
+    try {
+      const input = this.input("status", { id: this.outputTarget, view: "transcript", lines });
+      this.outputLines = lines; // Parser above enforces the 1–500 line bound.
+      const reply = await this.request(input, undefined, request.signal);
+      if (epoch !== this.outputEpoch) return;
+      if (!this.validOutputTarget()) {
+        this.stopOutput();
+        this.changed();
+        return;
+      }
+      const failure = this.failure(reply);
+      if (failure) throw new Error(failure);
+      if (!("kind" in reply) && reply.success && reply.method === "status") {
+        this.state.transcript = reply.data;
+        this.state.transcriptId = this.outputTarget;
+        this.state.transcriptAt = this.time.now();
+      }
+    } catch (error) {
+      if (epoch === this.outputEpoch) {
+        this.state.outputError = String(error);
+        this.state.outputFollowing = false; // Explicit retry after a read failure.
+      }
+    } finally {
+      if (epoch === this.outputEpoch) {
+        this.outputRequest = undefined;
+        this.state.outputLoading = false;
+        if (this.state.outputFollowing && this.validOutputTarget()) {
+          this.outputTimer = this.time.set(() => void this.readOutput(), 2000);
+        } else this.state.outputFollowing = false;
         this.changed();
       }
     }
@@ -358,6 +454,7 @@ export class SubagentsController {
     const generation = this.generation;
     let receipt: Receipt | undefined;
     let acquiredStatus = false;
+    let statusOutputEpoch: number | undefined;
     try {
       const input = this.input(method, params);
       if (
@@ -390,6 +487,9 @@ export class SubagentsController {
       this.state.busy = true;
       this.state.error = "";
       if (method === "status") {
+        this.stopOutput();
+        statusOutputEpoch = this.outputEpoch;
+        this.state.transcriptAt = undefined;
         this.state.transcript = undefined;
         this.state.transcriptId =
           input.method === "status" ? (input.params?.id ?? "") : "";
@@ -432,7 +532,10 @@ export class SubagentsController {
                   ? reply.data.text
                   : "Accepted; inspect status for terminal evidence.";
         }
-        if (reply.method === "status") this.state.transcript = reply.data;
+        if (reply.method === "status" && statusOutputEpoch === this.outputEpoch) {
+          this.state.transcript = reply.data;
+          this.state.transcriptAt = this.time.now();
+        }
         if (reply.method === "manage") this.state.schedules = reply.data;
         if (reply.method === "cost") {
           this.state.cost = reply.data;

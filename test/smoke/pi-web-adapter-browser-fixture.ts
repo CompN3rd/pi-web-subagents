@@ -26,6 +26,7 @@ const calls: any[] = [];
 let listener: any;
 let fail = false;
 let uncertain = false;
+let output: string | undefined;
 let status = snapshot(true) as ReturnType<typeof graphSnapshot>;
 const context = panelContext(async (input) => {
   calls.push(input);
@@ -44,7 +45,13 @@ const context = panelContext(async (input) => {
     input.method === "status"
       ? {
           ...status,
-          text: '<img src=x onerror="window.evil=true"> literal transcript',
+          text: input.params?.id && output !== undefined ? output : '<img src=x onerror="window.evil=true"> literal transcript',
+          ...(input.params?.id && output !== undefined ? { details: { workflow: {
+            stopCause: "held", trace: [
+              { operation: "host-check", key: "gate", phase: "acceptance", label: "Host acceptance check", state: "failed", durationMs: 0, reused: false },
+              { operation: "spawn", key: "worker", phase: "implementation", agent: "worker", runId: "reported-reference", state: "complete", durationMs: 12345, reused: true },
+            ],
+          } } } : {}),
         }
       : undefined,
   );
@@ -120,6 +127,7 @@ Object.assign(window, {
         (root) => root.id !== id,
       );
     },
+    setOutput(value: string | undefined) { output = value; },
     setFailure(value: boolean) {
       fail = value;
     },
