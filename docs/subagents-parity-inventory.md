@@ -90,7 +90,12 @@ Leg 5 verifies the exact released artifact and updates adapter/engine mapping to
 0.88.1, with unchanged host and RPC surface. See
 [`upstream-0.88.1.md`](upstream-0.88.1.md) and
 [`subagents-parity-leg5-validation.md`](subagents-parity-leg5-validation.md).
-Mapping is not an installed-engine upgrade or runtime acceptance. Other rows
+Mapping is not an installed-engine upgrade or runtime acceptance.
+Leg 6 adds bounded v5 `subagent` tool cards, grouped requested/result evidence,
+progress/output/usage and workflow preflight/acceptance/trace presentation (C1,
+supported parts of A4/A7/A8/A11/A12). See
+[`subagents-parity-leg6-validation.md`](subagents-parity-leg6-validation.md).
+Custom-message cards and session-row-label disposition remain open. Other rows
 below remain open unless updated.
 
 ## Inventory
@@ -117,7 +122,7 @@ Legend:
 | A9 | Current context window, window peak when formatted, input/output spent; totals in compact fleet | Unlinked fleet rows show input/output/spent/window/peak and observed elapsed | **Implemented / public fleet fields.** Missing windows are unknown; no invented utilization percentage or fleet/tree combined total. Identity-linked per-node usage and persistent compact surface remain API/UI gaps | U1, U3 `itemStats`, U5; W1–W2 |
 | A10 | Queued/running/completed/failed/paused/stopped/rejected/partial; attention and interrupted distinctions | Textual state pills, readable activity, active/attention/other reported-state filtering | **Implemented / supplied states.** Attention is a local filter of reported state/activity/stale-monitor facts, not a pending-request count or liveness diagnosis. Execution, delivery and process proof remain separate | U2–U4; W1–W3 |
 | A11 | Nested fanout tree and chain/parallel groups, role/phase labels, current stage and progress | Bounded nested cards with independently selectable read-only inspectors | **Partial / supported nesting implemented.** Parentage and occurrence selection are preserved; supplied targeted phases/trace are readable (A12). No inferred DAG, child control binding or full workflow denominator | U1–U3; W1–W2 |
-| A12 | Workflow checklist/phase counts, lane role/state, gate/review/acceptance, next action, workspace/ref/output, blocked/stale/watchdog chips, preflight warnings | Supplied targeted trace shows operation/key/phase/label/agent/state/duration/reuse/run reference plus failure kind, stop cause and reuse source | **Partial / supported trace implemented.** Bounded historical evidence, not a complete plan or percentage. Full workflow/preflight/acceptance views still need validated tool details or richer public projection, not guesses from labels | U2 `projectAsyncLane`, `renderWorkflowChatProgress`; W2 `projectTool` |
+| A12 | Workflow checklist/phase counts, lane role/state, gate/review/acceptance, next action, workspace/ref/output, blocked/stale/watchdog chips, preflight warnings | Supplied targeted trace shows operation/key/phase/label/agent/state/duration/reuse/run reference plus failure kind, stop cause and reuse source | **Partial / bounded trace and inline facts implemented.** Leg 6 validates tool preflight lanes/coverage/warnings, acceptance status/evidence/runtime checks/parent decision and trace errors/warnings. Historical evidence, not a complete plan or percentage. Workflow graph/receipt lane, review/watchdog and other richer supplied details still need validation/presentation or explicit disposition; no guesses from labels | U2 `projectAsyncLane`, `renderWorkflowChatProgress`; W2 `projectTool` |
 | A13 | Host-owned monitor steps distinguish role/provider, verdict/reason, stale state and report | Readable monitor kind/provider/role/state/verdict/reason/detail/staleness, explicitly not an agent | **Implemented / existing facts.** Link targets/reports remain omitted pending reviewed public identity/path handling; host steps are not child control targets | U6; W1–W2 |
 
 ### B. Inspector, transcripts and controls
@@ -139,7 +144,7 @@ Legend:
 
 | ID | Upstream displays / does | Current web plugin | Gap and disposition | Evidence |
 | --- | --- | --- | --- | --- |
-| C1 | Rich single/parallel/chain/workflow tool cards: task, live output, model/context, tool/token/cost/time metrics, grouped outcomes; compact/expanded forms | No transcript renderer contributions | **Missing / adapter.** Host v5 provides the surface and incoming tool details. Validate bounded schemas and render supplied facts; no tools launched by rendering | U2; W4; H1 |
+| C1 | Rich single/parallel/chain/workflow tool cards: task, live output, model/context, tool/token/cost/time metrics, grouped outcomes; compact/expanded forms | V5 fixed-name `subagent` tool cards: bounded requested groups/tasks, reported children/progress/output, model/context/thinking, tool arguments/counts, usage, preflight/acceptance/trace; native disclosures | **Implemented / supported subset, fixture validation (leg 6).** Explicit tool-call state is not queried-run state. Unknown/malformed/oversized selected schemas fall back; default view preserves complete source. No RPC/control from rendering, artifact/history scans or inferred identities. Configurable wait names delegate. Full nested workflow graph, richer review/watchdog/runner details and real-host lifecycle validation remain open | U2; W4; H1 |
 | C2 | Compact expandable completion, workflow-child, wait, steering, control/attention, auto-resume/result-write failure notices | Host generic messages, no plugin-specific rendering; panel receipts only for its own requests | **Missing / adapter.** Displayed custom-message types can be rendered via v5. Do not confuse notification history with current state or this panel's receipts | U4 `MESSAGE_VIEWS`; W4; H1 |
 | C3 | Supervisor decision/interview/progress requests, unanswered/blocked reminders, reply history | “Inspect supervisor requests” stages a parent-message chip only | **Partial.** Rich displayed request/reminder cards are feasible. Direct pending-request inbox/reply is **API-blocked**. Reply `appendEntry` history is not exposed by v5 custom-message rendering | U4 `MESSAGE_VIEWS`/`ENTRY_VIEWS`; W1 `stageParentMessage`; U5; H1 |
 | C4 | Watchdog severity, importance, category, evidence, recommendation; held/blocked/reconciliation state and clarification notices | No specialized rendering | **Missing / adapter** for displayed warnings supplied in parent messages/tool details; live watchdog configuration, permission decisions and hidden-entry history remain separate API gaps | U4, `src/watchdog/render.ts`; W4; H1 |
@@ -185,8 +190,9 @@ renderers are **not** displayed custom messages.
 - Fleet goal, elapsed age, input/output/total/window/windowPeak, role/effort.
 - Cost usage for parent/children/totals: all token/cache/turn fields, not just money.
 - Targeted result identity/error/output; leg 3 now renders bounded supplied workflow trace facts and selected-only text follow. Raw evidence remains available.
-- V5 parent tool-entry and displayed custom-message payloads, independently of
-  panel RPC. These need their own bounded, untrusted-input parsers.
+- V5 parent tool-entry payloads now have a separate bounded, untrusted-input parser
+  and display-only renderer (leg 6), independent of panel RPC. Displayed
+  custom-message payloads still require their own validated schemas/renderers.
 
 ### Public data omitted at baseline
 

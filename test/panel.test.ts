@@ -358,7 +358,7 @@ test("browser plugin API5 local panel and runtime-qualified action; contribution
       lifetimeSignal: new AbortController().signal,
     } as Parameters<typeof plugin.activate>[0]);
     assert.equal(plugin.apiVersion, 5);
-    assert.equal(registered, 1);
+    assert.equal(registered, 2);
     assert.equal(activation.contributions.workspacePanels[0]!.id, "subagents");
     let selected = "";
     activation.contributions.actions[0]!.run({

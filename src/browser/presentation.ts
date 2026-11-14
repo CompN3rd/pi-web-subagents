@@ -97,6 +97,8 @@ export function workflowTrace(workflow: JsonObject | undefined, content = englis
           [t("traceRun"), text(value.runId)],
           [t("traceDuration"), durationBetween(0, value.durationMs, content)],
           [t("traceReuse"), typeof value.reused === "boolean" ? t(value.reused ? "reused" : "notReused") : t("unknown")],
+          [t("traceWarning"), text(value.warning)],
+          [t("traceError"), text(value.error)],
         ])}
       </li>`;
     })}</ol>

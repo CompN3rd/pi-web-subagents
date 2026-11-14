@@ -4,6 +4,7 @@ import { html as elementHtml, unsafeStatic } from "lit/static-html.js";
 import { SubagentsPanel } from "./browser/panel.js";
 import { browserUuid } from "./browser/uuid.js";
 import { createContent } from "./browser/localization.js";
+import { TranscriptCard, toolRenderers } from "./browser/transcript.js";
 
 const stylesheetIntegration: PluginCapability<StylesheetIntegrationCapabilityV1> = {
   pluginId: "pi-web", id: "stylesheet-integration", version: 1,
@@ -20,7 +21,10 @@ const stylesheetIntegration: PluginCapability<StylesheetIntegrationCapabilityV1>
 const plugin = {
   apiVersion: 5,
   name: "Subagents",
-  requires: [stylesheetIntegration],
+  requires: [stylesheetIntegration, { pluginId: "pi-web", id: "transcript-rendering", version: 1, parse(value: unknown) {
+    if (!value || typeof value !== "object") throw new Error("Transcript rendering v1 unavailable");
+    return value;
+  } }],
   activate({ runtimePluginId, selection, lifetimeSignal, localization }) {
     const content = createContent(localization);
     const { t } = content;
@@ -38,11 +42,22 @@ const plugin = {
         localization?.controller(this);
       }
     });
+    const cardName = `compn3rd-subagent-card-${browserUuid()}`;
+    const cardTag = unsafeStatic(cardName);
+    customElements.define(cardName, class extends TranscriptCard {
+      constructor() {
+        super();
+        if (!styles) throw new Error("Subagent card mounted before plugin start");
+        styles.createController(this, { sharedUi: true });
+        localization?.controller(this);
+      }
+    });
     return {
       start({ capabilities }: PluginStartContext) {
         styles = capabilities.resolve(stylesheetIntegration);
       },
       contributions: {
+        transcriptRenderers: toolRenderers((body) => elementHtml`<${cardTag} .body=${body}></${cardTag}>`, content),
         actions: [
           {
             id: "open",

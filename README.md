@@ -10,7 +10,8 @@ This checkout prepares adapter **0.88.1** with an exact optional peer mapping to
 separately installed **`pi-subagents@0.88.1`**, targeting PI WEB 1.202611.1 and
 plugin API v5. The released engine tarball has been SHA-512 verified; it has not
 been installed or executed by this work. The adapter-local parity redesign is
-still in progress, including pending inline renderers. This is not a publication
+still in progress: bounded inline tool cards are implemented; displayed-message
+cards remain pending. This is not a publication
 or full-parity claim. See the [exact engine audit and upgrade cautions](docs/upstream-0.88.1.md).
 
 The earlier 0.84.1 release targeted engine 0.84.0 and adopted shared host controls,
@@ -109,7 +110,7 @@ see the validation boundaries below.
 | Existing schedules | Selectable exact-ID cached records, readable details/history, and original text; on-demand list/show/history plus confirmed pause/resume/run/delete. No create/update or Pi Web Automations integration |
 | Supervisor questions/replies | Ordinary parent conversation/tool workflow; **no direct reply-card API** |
 | Agent/model/config editing | Existing upstream commands/dialogs; not a new web configuration editor |
-| Rich inline tool/message rendering | Available in pinned host API v5; adapter integration is pending. This does not expose structured child transcripts or hidden custom entries |
+| Rich inline tool/message rendering | V5 `subagent` tool cards render bounded reported tasks/output, progress, model/context, usage, grouped results, workflow traces/preflight and acceptance facts. Unknown/malformed payloads keep the generic host view; default-view controls remain host-owned. Displayed custom-message cards remain pending. No structured child-history or hidden-entry access |
 | TUI widgets, overlays and keybindings | Not ported literally |
 | Child-scoped controls | Display only; whole-run controls avoid ambiguous child identities |
 | Activity refresh and receipts | Bounded event-driven observation with 5s reconciliation; older engines poll at 2s active/10s idle; up to 20 in-memory receipts (not persistent) |

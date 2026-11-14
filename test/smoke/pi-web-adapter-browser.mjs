@@ -625,6 +625,66 @@ try {
   const hiddenCalls = await page.evaluate(() => window.fixture.calls.length);
   await page.waitForTimeout(2200);
   assert.equal(await page.evaluate(() => window.fixture.calls.length), hiddenCalls);
+
+  // C1/A12: public v5 resolver/input/lifecycle fixture, not the real host renderer implementation.
+  await page.evaluate(() => window.fixture.renderTool("workflow"));
+  const card = page.locator("#transcript-fixture");
+  await card.getByRole("heading", { name: "Workflow preflight", exact: true }).waitFor();
+  assert.match(await card.locator(".card").innerText(), /Tool call: success/);
+  assert.match(await card.locator(".card").innerText(), /Tool-call success is not run success/);
+  assert.match(await card.locator(".card").innerText(), /running/);
+  assert.match(await card.locator(".card").innerText(), /Host check/);
+  assert.match(await card.locator(".card").innerText(), /Checks blocked/);
+  assert.equal(await card.locator("button, a, img, script").count(), 0);
+  assert.equal(await page.evaluate(() => window.evil), undefined);
+  assert.equal(await page.evaluate(() => window.fixture.styles.roots.size), 2);
+  const taskDisclosure = card.locator("summary").filter({ hasText: /^Reported task$/ }).first();
+  await taskDisclosure.focus();
+  await page.keyboard.press("Enter");
+  assert.equal(await taskDisclosure.evaluate((element) => element.parentElement.open), true);
+  await page.evaluate(() => window.fixture.renderTool("workflow"));
+  assert.equal(await taskDisclosure.evaluate((element) => element.parentElement.open), true, "repeat render retains disclosure");
+  await page.setViewportSize({ width: 375, height: 900 });
+  await page.evaluate(() => {
+    window.fixture.localization.change("ar", "de-DE", { toolCard: "Carte historique" }, "rtl");
+    document.documentElement.style.setProperty("--pi-text", "rgb(240, 240, 240)");
+    document.documentElement.style.setProperty("--pi-muted", "rgb(190, 195, 205)");
+    document.documentElement.style.setProperty("--pi-surface", "rgb(25, 28, 36)");
+    document.documentElement.style.setProperty("--pi-border", "rgb(100, 110, 125)");
+  });
+  await card.getByRole("heading", { name: "Carte historique · workflow", exact: true }).waitFor();
+  assert.equal(await card.locator(".card").getAttribute("dir"), "rtl");
+  assert.ok(await card.evaluate((element) => element.scrollWidth <= element.clientWidth + 1));
+  assert.equal(await card.locator(".card").evaluate((element) => getComputedStyle(element).backgroundColor), "rgb(25, 28, 36)");
+  assert.equal(await card.locator(".card").evaluate((element) => getComputedStyle(element).color), "rgb(240, 240, 240)");
+  await card.screenshot({ path: join(artifacts, "inline-workflow-mobile-rtl.png") });
+  await page.evaluate(() => {
+    document.documentElement.style.setProperty("--pi-text", "rgb(24, 28, 36)");
+    document.documentElement.style.setProperty("--pi-muted", "rgb(65, 72, 82)");
+    document.documentElement.style.setProperty("--pi-surface", "rgb(255, 255, 255)");
+    window.fixture.localization.change("en", "en-US", {});
+  });
+  assert.equal(await card.locator(".card").evaluate((element) => getComputedStyle(element).backgroundColor), "rgb(255, 255, 255)");
+  assert.equal(await card.locator(".card").evaluate((element) => getComputedStyle(element).color), "rgb(24, 28, 36)");
+  await card.screenshot({ path: join(artifacts, "inline-workflow-mobile-light.png") });
+  for (const mode of ["single", "parallel", "chain"]) {
+    await page.evaluate((mode) => window.fixture.renderTool(mode), mode);
+    await card.getByRole("heading", { name: `Subagent tool entry · ${mode}`, exact: true }).waitFor();
+  }
+  for (const mode of ["malformed", "unknown"]) {
+    await page.evaluate((mode) => window.fixture.renderTool(mode), mode);
+    await card.getByText("Generic host fallback", { exact: true }).waitFor();
+    assert.equal(await page.evaluate(() => window.fixture.styles.roots.size), 1);
+  }
+  await page.evaluate(() => window.fixture.renderTool("workflow"));
+  await card.getByRole("heading", { name: "Workflow preflight", exact: true }).waitFor();
+  await page.evaluate(() => window.fixture.renderTool("workflow", true));
+  await card.getByText("Generic host fallback", { exact: true }).waitFor();
+  assert.equal(await page.evaluate(() => window.fixture.styles.roots.size), 1);
+  await page.evaluate(() => { window.fixture.renderTool("workflow"); window.fixture.removeTool(); });
+  assert.equal(await page.evaluate(() => window.fixture.calls.length), hiddenCalls, "inline rendering performs no RPC reads or mutations");
+  assert.equal(await page.evaluate(() => window.fixture.styles.roots.size), 1);
+  assert.equal(await page.evaluate(() => window.fixture.localization.subscribers), 1);
   await page.evaluate(() => window.fixture.unmount());
   await page.waitForTimeout(100);
   const calls = await page.evaluate(() => window.fixture.calls.length);
@@ -661,6 +721,8 @@ try {
       "live translated labels, RTL and theme tokens preserve draft/selection without execution",
       "stylesheet/localization registrations release on unmount",
       "escaped output",
+      "C1/A12: built inline single/parallel/chain/workflow cards, literal hostile strings, partial preflight, acceptance and host trace; call success distinct from run state; no RPC from rendering",
+      "C1: fake v5 default-view/unknown/malformed fallback and abort/unmount cleanup; keyboard disclosure retained on repeat rendering; mobile RTL/localization/theme containment",
       "B4: bounded selected-only follow, scroll-away retention, jump restores auto-scroll, hidden cancels without auto-resume, target change clears output",
       "A11-A13: readable reported workflow trace, host check operation and read-only references",
       "reduced-motion emulation; output scroll behavior is immediate, not smooth",

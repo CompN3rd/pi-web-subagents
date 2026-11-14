@@ -120,8 +120,8 @@ test("browser registration retains activation-local constructors and pure escape
     const context = activationContext();
     const first = plugin.activate(context).contributions.workspacePanels[0]!;
     const second = plugin.activate(context).contributions.workspacePanels[0]!;
-    assert.equal(registered.size, 2);
-    const entries = [...registered];
+    assert.equal(registered.size, 4);
+    const entries = [...registered].filter(([name]) => name.startsWith("compn3rd-subagents-"));
     assert.notEqual(entries[0]![1], entries[1]![1]);
     for (const [name, constructor] of entries) {
       assert.match(name, /^compn3rd-subagents-[0-9a-f-]+$/);

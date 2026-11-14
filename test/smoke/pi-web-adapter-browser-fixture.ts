@@ -1,4 +1,5 @@
-import { render } from "../../node_modules/lit/index.js";
+import { html, render } from "../../node_modules/lit/index.js";
+import { toolFixture } from "../transcript-fixtures.ts";
 import plugin from "../../dist/browser/index.js";
 import {
   panelContext,
@@ -96,8 +97,26 @@ const result = plugin.activate({
 });
 result.start({ capabilities: { resolve: () => styles.service }, signal: lifetime.signal });
 render(result.contributions.workspacePanels![0]!.render(context), container);
+const transcriptContainer = document.createElement("div");
+transcriptContainer.id = "transcript-fixture";
+let transcriptSignal = new AbortController();
 Object.assign(window, {
   fixture: {
+    renderTool(kind: string, defaultView = false) {
+      transcriptSignal.abort();
+      transcriptSignal = new AbortController();
+      if (!transcriptContainer.isConnected) document.body.append(transcriptContainer);
+      const base = toolFixture(kind === "malformed" || kind === "unknown" ? "single" : kind);
+      const input = { ...base, signal: transcriptSignal.signal, entry: { ...base.entry,
+        ...(kind === "malformed" ? { details: { mode: "single", results: "bad" } } : {}),
+        ...(kind === "unknown" ? { toolName: "renamed_wait" } : {}),
+      } };
+      const resolver = result.contributions.transcriptRenderers![0]!;
+      if (resolver.target !== "tool") throw new Error("Expected tool resolver");
+      const template = defaultView ? undefined : resolver.resolve(input.entry.toolName, () => undefined)?.render(input);
+      render(html`<div aria-label="Fixture host frame"><p>Host-owned controls remain outside the body</p>${template ?? html`<p>Generic host fallback</p>`}</div>`, transcriptContainer);
+    },
+    removeTool() { transcriptSignal.abort(); render(null, transcriptContainer); transcriptContainer.remove(); },
     actions: result.contributions.actions!.map((action) => action.title),
     calls,
     localization,
