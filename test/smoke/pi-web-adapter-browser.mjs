@@ -685,6 +685,68 @@ try {
   assert.equal(await page.evaluate(() => window.fixture.calls.length), hiddenCalls, "inline rendering performs no RPC reads or mutations");
   assert.equal(await page.evaluate(() => window.fixture.styles.roots.size), 1);
   assert.equal(await page.evaluate(() => window.fixture.localization.subscribers), 1);
+  // C2–C4: displayed custom-message family via exact v5 contributions.
+  for (const type of await page.evaluate(() => window.fixture.noticeTypes)) {
+    await page.evaluate((type) => window.fixture.renderNotice(type), type);
+    await card.locator(".card").waitFor();
+    assert.match(await card.locator(".card").innerText(), /Historical displayed notice/);
+    assert.equal(await card.locator("button, a, img, script").count(), 0);
+    assert.equal(await page.evaluate(() => window.fixture.styles.roots.size), 2);
+  }
+  await page.evaluate(() => window.fixture.renderNotice("subagent_supervisor_request"));
+  await card.getByText("Decision requested", { exact: true }).waitFor();
+  assert.match(await card.locator(".card").innerText(), /does not answer or approve this historical request/);
+  const noticeDisclosure = card.locator("summary").filter({ hasText: /^Original notice text$/ });
+  await noticeDisclosure.focus();
+  await page.keyboard.press("Enter");
+  assert.equal(await noticeDisclosure.evaluate((element) => element.parentElement.open), true);
+  await page.evaluate(() => window.fixture.renderNotice("subagent_supervisor_request"));
+  assert.equal(await noticeDisclosure.evaluate((element) => element.parentElement.open), true);
+  assert.match(await card.locator(".card").innerText(), /<img src=x onerror=/);
+  await page.evaluate(() => window.fixture.renderNotice("subagent_supervisor_request", "progress"));
+  await card.getByText("Informational progress update", { exact: true }).waitFor();
+  await page.evaluate(() => window.fixture.renderNotice("subagent_supervisor_request", "interview"));
+  await card.getByText("Structured answers requested", { exact: true }).waitFor();
+  await page.evaluate(() => window.fixture.renderNotice("subagent_watchdog_warning"));
+  await card.getByText("blocker", { exact: true }).waitFor();
+  assert.match(await card.locator(".card").innerText(), /No regression assertion/);
+  assert.match(await card.locator(".card").innerText(), /watchdog stopped continuing the run/);
+  await page.evaluate(() => {
+    window.fixture.localization.change("ar", "de-DE", { watchdogWarning: "Avertissement historique" }, "rtl");
+    document.documentElement.style.setProperty("--pi-text", "rgb(240, 240, 240)");
+    document.documentElement.style.setProperty("--pi-muted", "rgb(190, 195, 205)");
+    document.documentElement.style.setProperty("--pi-surface", "rgb(25, 28, 36)");
+  });
+  await card.getByRole("heading", { name: "Avertissement historique", exact: true }).waitFor();
+  assert.equal(await card.locator(".card").getAttribute("dir"), "rtl");
+  assert.ok(await card.evaluate((element) => element.scrollWidth <= element.clientWidth + 1));
+  await card.screenshot({ path: join(artifacts, "inline-watchdog-mobile-rtl.png") });
+  await page.evaluate(() => {
+    window.fixture.localization.change("en", "en-US", {});
+    document.documentElement.style.setProperty("--pi-text", "rgb(24, 28, 36)");
+    document.documentElement.style.setProperty("--pi-muted", "rgb(65, 72, 82)");
+    document.documentElement.style.setProperty("--pi-surface", "rgb(255, 255, 255)");
+    window.fixture.renderNotice("subagent-notify");
+  });
+  await card.getByRole("heading", { name: "Reported run outcomes", exact: true }).waitFor();
+  assert.match(await card.locator(".card").innerText(), /completed/);
+  assert.match(await card.locator(".card").innerText(), /paused/);
+  assert.ok(await card.evaluate((element) => element.scrollWidth <= element.clientWidth + 1));
+  await card.screenshot({ path: join(artifacts, "inline-completion-mobile-light.png") });
+  await page.evaluate(() => window.fixture.renderNotice("subagent-notify", "legacy"));
+  await card.getByText(/No structured details supplied/).waitFor();
+  for (const type of ["subagent-notify", "subagent_supervisor_reply", "subagent-notify-pending", "unknown"]) {
+    await page.evaluate((type) => window.fixture.renderNotice(type, "malformed"), type);
+    await card.getByText("Generic host fallback", { exact: true }).waitFor();
+    assert.equal(await page.evaluate(() => window.fixture.styles.roots.size), 1);
+  }
+  await page.evaluate(() => window.fixture.renderNotice("subagent_supervisor_request", undefined, true));
+  await card.getByText("Generic host fallback", { exact: true }).waitFor();
+  await page.evaluate(() => { window.fixture.renderNotice("subagent_watchdog_warning"); window.fixture.removeTool(); });
+  assert.equal(await page.evaluate(() => window.evil), undefined);
+  assert.equal(await page.evaluate(() => window.fixture.calls.length), hiddenCalls, "notice rendering performs no RPC reads or mutations");
+  assert.equal(await page.evaluate(() => window.fixture.styles.roots.size), 1);
+  assert.equal(await page.evaluate(() => window.fixture.localization.subscribers), 1);
   await page.evaluate(() => window.fixture.unmount());
   await page.waitForTimeout(100);
   const calls = await page.evaluate(() => window.fixture.calls.length);
@@ -723,6 +785,8 @@ try {
       "escaped output",
       "C1/A12: built inline single/parallel/chain/workflow cards, literal hostile strings, partial preflight, acceptance and host trace; call success distinct from run state; no RPC from rendering",
       "C1: fake v5 default-view/unknown/malformed fallback and abort/unmount cleanup; keyboard disclosure retained on repeat rendering; mobile RTL/localization/theme containment",
+      "C2–C4: all 14 exact displayed custom-message types; grouped mixed outcomes, decision/interview/progress distinctions, reminders, watchdog evidence and historical held state; no direct controls or RPC",
+      "C2–C4: legacy text, unknown/malformed/hidden-entry-type/default fallback; keyboard disclosure/repeat update, escaping, narrow RTL/theme containment, unmount/style/localization cleanup",
       "B4: bounded selected-only follow, scroll-away retention, jump restores auto-scroll, hidden cancels without auto-resume, target change clears output",
       "A11-A13: readable reported workflow trace, host check operation and read-only references",
       "reduced-motion emulation; output scroll behavior is immediate, not smooth",

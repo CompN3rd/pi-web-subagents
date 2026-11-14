@@ -5,6 +5,7 @@ import { SubagentsPanel } from "./browser/panel.js";
 import { browserUuid } from "./browser/uuid.js";
 import { createContent } from "./browser/localization.js";
 import { TranscriptCard, toolRenderers } from "./browser/transcript.js";
+import { noticeRenderers } from "./browser/notices.js";
 
 const stylesheetIntegration: PluginCapability<StylesheetIntegrationCapabilityV1> = {
   pluginId: "pi-web", id: "stylesheet-integration", version: 1,
@@ -57,7 +58,8 @@ const plugin = {
         styles = capabilities.resolve(stylesheetIntegration);
       },
       contributions: {
-        transcriptRenderers: toolRenderers((body) => elementHtml`<${cardTag} .body=${body}></${cardTag}>`, content),
+        transcriptRenderers: [toolRenderers, noticeRenderers].flatMap((renderers) =>
+          renderers((body) => elementHtml`<${cardTag} .body=${body}></${cardTag}>`, content)),
         actions: [
           {
             id: "open",

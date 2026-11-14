@@ -1,5 +1,6 @@
 import { html, render } from "../../node_modules/lit/index.js";
 import { toolFixture } from "../transcript-fixtures.ts";
+import { noticeFixture, noticeFixtures } from "../notice-fixtures.ts";
 import plugin from "../../dist/browser/index.js";
 import {
   panelContext,
@@ -114,6 +115,22 @@ Object.assign(window, {
       const resolver = result.contributions.transcriptRenderers![0]!;
       if (resolver.target !== "tool") throw new Error("Expected tool resolver");
       const template = defaultView ? undefined : resolver.resolve(input.entry.toolName, () => undefined)?.render(input);
+      render(html`<div aria-label="Fixture host frame"><p>Host-owned controls remain outside the body</p>${template ?? html`<p>Generic host fallback</p>`}</div>`, transcriptContainer);
+    },
+    noticeTypes: Object.keys(noticeFixtures),
+    renderNotice(type: string, variant?: string, defaultView = false) {
+      transcriptSignal.abort();
+      transcriptSignal = new AbortController();
+      if (!transcriptContainer.isConnected) document.body.append(transcriptContainer);
+      const base = noticeFixture(type);
+      const input = { ...base, signal: transcriptSignal.signal, entry: { ...base.entry,
+        ...(variant === "malformed" ? { details: [] } : {}),
+        ...(variant === "legacy" ? { details: undefined } : {}),
+        ...(variant === "progress" || variant === "interview" ? { details: { ...noticeFixtures.subagent_supervisor_request,
+          reason: variant === "progress" ? "progress_update" : "interview_request", expectsReply: variant !== "progress" } } : {}),
+      } };
+      const renderer = result.contributions.transcriptRenderers!.find((entry) => entry.target === "custom-message" && entry.customType === type);
+      const template = defaultView || renderer?.target !== "custom-message" ? undefined : renderer.render(input);
       render(html`<div aria-label="Fixture host frame"><p>Host-owned controls remain outside the body</p>${template ?? html`<p>Generic host fallback</p>`}</div>`, transcriptContainer);
     },
     removeTool() { transcriptSignal.abort(); render(null, transcriptContainer); transcriptContainer.remove(); },

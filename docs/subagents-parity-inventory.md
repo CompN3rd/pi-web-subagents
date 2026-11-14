@@ -95,8 +95,11 @@ Leg 6 adds bounded v5 `subagent` tool cards, grouped requested/result evidence,
 progress/output/usage and workflow preflight/acceptance/trace presentation (C1,
 supported parts of A4/A7/A8/A11/A12). See
 [`subagents-parity-leg6-validation.md`](subagents-parity-leg6-validation.md).
-Custom-message cards and session-row-label disposition remain open. Other rows
-below remain open unless updated.
+Leg 7 adds all 14 released displayed custom-message card types, historical grouped
+outcomes, supervisor request/reminder distinctions and readable watchdog evidence
+(C2–C4). See [`subagents-parity-leg7-validation.md`](subagents-parity-leg7-validation.md).
+Session-row-label disposition and richer tool workflow details remain open. Other
+rows below remain open unless updated.
 
 ## Inventory
 
@@ -145,9 +148,9 @@ Legend:
 | ID | Upstream displays / does | Current web plugin | Gap and disposition | Evidence |
 | --- | --- | --- | --- | --- |
 | C1 | Rich single/parallel/chain/workflow tool cards: task, live output, model/context, tool/token/cost/time metrics, grouped outcomes; compact/expanded forms | V5 fixed-name `subagent` tool cards: bounded requested groups/tasks, reported children/progress/output, model/context/thinking, tool arguments/counts, usage, preflight/acceptance/trace; native disclosures | **Implemented / supported subset, fixture validation (leg 6).** Explicit tool-call state is not queried-run state. Unknown/malformed/oversized selected schemas fall back; default view preserves complete source. No RPC/control from rendering, artifact/history scans or inferred identities. Configurable wait names delegate. Full nested workflow graph, richer review/watchdog/runner details and real-host lifecycle validation remain open | U2; W4; H1 |
-| C2 | Compact expandable completion, workflow-child, wait, steering, control/attention, auto-resume/result-write failure notices | Host generic messages, no plugin-specific rendering; panel receipts only for its own requests | **Missing / adapter.** Displayed custom-message types can be rendered via v5. Do not confuse notification history with current state or this panel's receipts | U4 `MESSAGE_VIEWS`; W4; H1 |
-| C3 | Supervisor decision/interview/progress requests, unanswered/blocked reminders, reply history | “Inspect supervisor requests” stages a parent-message chip only | **Partial.** Rich displayed request/reminder cards are feasible. Direct pending-request inbox/reply is **API-blocked**. Reply `appendEntry` history is not exposed by v5 custom-message rendering | U4 `MESSAGE_VIEWS`/`ENTRY_VIEWS`; W1 `stageParentMessage`; U5; H1 |
-| C4 | Watchdog severity, importance, category, evidence, recommendation; held/blocked/reconciliation state and clarification notices | No specialized rendering | **Missing / adapter** for displayed warnings supplied in parent messages/tool details; live watchdog configuration, permission decisions and hidden-entry history remain separate API gaps | U4, `src/watchdog/render.ts`; W4; H1 |
+| C2 | Compact expandable completion, workflow-child, wait, steering, control/attention, auto-resume/result-write failure notices | Historical v5 cards for the complete released displayed-message family; grouped mixed outcomes, child refs, wait outcome, steering failure/partial/recovery, attention facts, failure headings, original text disclosure | **Implemented / supported subset, fixture validation (leg 7).** No inferred live state, delivery acknowledgement or panel receipt. Legacy/text-only notices retain bounded escaped text, not facts parsed from prose. Unknown/malformed/oversized selected payloads fall back. No private paths opened | U4 `MESSAGE_VIEWS`; W4; H1 |
+| C3 | Supervisor decision/interview/progress requests, unanswered/blocked reminders, reply history | Readable historical decision/interview/progress cards, request body and display-only IDs; unanswered/blocked reminder IDs; guidance to panel's “Inspect supervisor requests” parent-message helper | **Displayed subset implemented (leg 7); Partial / API overall.** No live pending count or answer inferred; interview body is text, not an answer form. Renderer input has no composer context, so preparation stays in the existing scoped panel helper. Direct pending-request inbox/reply and reply `appendEntry` history remain **API-blocked** | U4 `MESSAGE_VIEWS`/`ENTRY_VIEWS`; W1 `stageParentMessage`; U5; H1 |
+| C4 | Watchdog severity, importance, category, evidence, recommendation; held/blocked/reconciliation state and clarification notices | Displayed watchdog cards show severity/importance/category/source, summary/evidence/recommended action, reported state/stale/error/repeats and explicit historical stalemate hold; clarification text disclosure; completion watchdog blockers | **Displayed-message subset implemented (leg 7); Partial overall.** No raw XML primary warning UI when structured details exist. Richer tool-detail watchdog presentation remains open. Live configuration, permission decisions and hidden-entry history remain **API-blocked** | U4, `src/watchdog/render.ts`; W4; H1 |
 | C5 | Parent, each child, child total, overall total: input/output tokens, cache read/write, turns and cost; unavailable-child warning | Accessible on-demand table with all six fields, timestamp, unresolved count and incompleteness caveat | **Implemented / fixtures validated.** Regional formatting retains sub-four-decimal costs. Zero unresolved children is explicitly not completeness proof; no accounting polling or fleet merging | U7 `formatSubagentCostReport`; W1–W2 |
 | C6 | Agent selector with scope/source; model/provider and thinking pickers; system-prompt editor; detailed tools/skills/inheritance/output/override metadata | Explicit New run focused form; only relevant agent/task or script/workflow/args fields; context, label, optional model; readable confirmation and exact validated payload; `/subagents` helper | **Available-API launch UX implemented (leg 4); Partial / API overall.** Blank model sends no override. No agent/model/config management in event-bus `manage` (schedules only), so free text is labelled honestly, not a fabricated catalog. Generic select dialogs may work in chat; custom editor does not become a web editor automatically | U7; U5; W1; H1 |
 | C7 | `list` with search, at most 30 agents (0.88); guide/doctor and other textual management outcomes | No catalog/search/diagnostic browser; command helper only | **Missing / API** for native panel catalog. Render available textual/tool outcomes, but do not present RPC `manage` as arbitrary command execution | U8; U5; W1 |
@@ -192,7 +195,8 @@ renderers are **not** displayed custom messages.
 - Targeted result identity/error/output; leg 3 now renders bounded supplied workflow trace facts and selected-only text follow. Raw evidence remains available.
 - V5 parent tool-entry payloads now have a separate bounded, untrusted-input parser
   and display-only renderer (leg 6), independent of panel RPC. Displayed
-  custom-message payloads still require their own validated schemas/renderers.
+  custom-message payloads now have their own bounded schemas/renderers (leg 7).
+  Unknown fields are not traversed; original text/default host view remains available.
 
 ### Public data omitted at baseline
 

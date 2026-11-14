@@ -2,6 +2,13 @@
 
 ## Unreleased — 0.88.1 candidate
 
+- Add public v5 display-only cards for all 14 released displayed custom-message
+  types: grouped outcomes, supervisor decision/interview/progress/reminders,
+  steering/control attention, workflow failures and watchdog evidence/actions.
+  Historical state is not a live inbox or reply authority; hidden entries remain
+  hidden. Bounded validated projections, escaped original text and generic host
+  fallback have unit and isolated-browser evidence, not real-host acceptance.
+
 - Prepare adapter/optional engine mapping 0.88.1 using verified exact released
   tarball bytes, without installing or bundling the engine. Host remains
   1.202611.1 (API v5). The bundled RPC bridge is unchanged from 0.84.0; additive

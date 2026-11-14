@@ -25,6 +25,8 @@ const object = <S extends Record<string, Parser<unknown>>>(shape: S): Parser<{ [
   for (const key of Object.keys(shape)) out[key] = shape[key]!((value as Record<string, unknown>)[key], budget);
   return out as { [K in keyof S]: Parsed<S[K]> };
 };
+/** Shared bounded primitives for independent, display-only transcript schemas. */
+export const transcriptValidation = { text, number, integer, boolean, optional, oneOf, array, object };
 const s = optional(text), n = optional(number), b = optional(boolean);
 const usage = object({ input: n, output: n, cacheRead: n, cacheWrite: n, cost: n, turns: n });
 const progress = object({
