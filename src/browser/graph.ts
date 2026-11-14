@@ -21,7 +21,7 @@ export function graphEntries(nodes: AsyncNode[], parent: string[] = []): GraphEn
 export type RunFilter = { query: string; state: "all" | "active" | "attention" | "recent" };
 export const noFilter: RunFilter = { query: "", state: "all" };
 const activeStates = new Set(["running", "queued", "pending", "starting", "waiting"]);
-const attentionStates = new Set(["failed", "rejected", "partial", "blocked", "paused", "stopped", "attention", "waiting-for-supervisor"]);
+const attentionStates = new Set(["failed", "rejected", "partial", "blocked", "paused", "stopped", "attention", "needs_attention", "waiting-for-supervisor"]);
 export function matchesRun(node: AsyncNode, filter: RunFilter): boolean {
   const query = filter.query.trim().toLocaleLowerCase();
   const text = [node.id, node.label, node.agent, node.model, node.thinking, node.state,

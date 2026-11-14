@@ -262,7 +262,7 @@ try {
   assert.notEqual(await branch.getAttribute("open"), null);
   // A5–A7/A13: supported facts are visible without opening JSON disclosures.
   assert.equal(await connected.locator(".node-details[open]").count(), 0);
-  await connected.getByText("waiting-for-supervisor", { exact: true }).waitFor();
+  await connected.getByText("active_long_running", { exact: true }).waitFor();
   const rootFacts = connected.locator(":scope > article > .facts");
   assert.match(await rootFacts.textContent(), /Elapsed\s*1m 0s/);
   assert.match(await rootFacts.textContent(), /Tool elapsed at snapshot\s*3s/);
@@ -273,7 +273,7 @@ try {
   assert.match(await progress.textContent(), /Tests pass; reviewing results/);
   await connected.getByText("Host monitor (not an agent)", { exact: true }).waitFor();
   await connected.getByText("Reported stale", { exact: true }).waitFor();
-  await connected.getByText("Activity details", { exact: true }).click();
+  await connected.locator(":scope > article").getByText("Activity details", { exact: true }).click();
   assert.equal(await connected.locator(".node-details[open]").count(), 1);
   assert.equal(await connected.getByText("Deepest ", { exact: false }).count(), 1);
   assert.equal(await page.locator("img, script:not([src])").count(), 0);
@@ -356,6 +356,19 @@ try {
   await search.fill("");
   assert.equal(await graph.locator(".graph-root:visible").count(), 3);
   assert.notEqual(await branch.getAttribute("open"), null, "filtering preserves disclosures");
+  // R1: released activity enum keeps a matching running child and its non-attention ancestry.
+  const stateFilter = graph.locator("select");
+  await stateFilter.selectOption("attention");
+  await search.fill("needs_attention");
+  assert.equal(await graph.locator(".graph-root:visible").count(), 1);
+  assert.equal(await root.isVisible(), true);
+  assert.equal(await connected.locator(".graph-child:visible").count(), 1);
+  await connected.getByText("needs_attention", { exact: true }).waitFor();
+  await search.fill("active_long_running");
+  assert.equal(await graph.locator(".graph-root:visible").count(), 0, "long-running activity alone is not attention");
+  await stateFilter.selectOption("all");
+  await search.fill("");
+  assert.deepEqual(await mutationCalls(), beforeGraph, "attention filtering never performs mutations");
   await root.click();
   await page.locator('textarea[name="message"]').fill("graph scope draft");
   await page.evaluate(() => window.fixture.switchSession("session-graph"));
@@ -844,6 +857,7 @@ try {
       "scope resets selection/disclosures; stale/empty/unavailable warnings",
       "unique-root-only stop/interrupt/steer; duplicate and nested read-only inspectors; uncertain spawn does not retry",
       "reported-window filtering preserves disclosures; mobile inspector drill-in and Back focus",
+      "R1: needs_attention retains running child/ancestry; active_long_running alone is not attention; no mutation RPC",
       "375px dark/light/forced-colors screenshots and containment",
       "hidden observation pause",
       "unmount cleanup",

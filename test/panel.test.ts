@@ -563,6 +563,26 @@ test("A2: filters match reported facts and keep ancestry without fabricating his
   assert.equal(matchesRun({ ...roots[0]!, state: "complete" }, { query: "", state: "recent" }), true);
 });
 
+test("A2/A10 R1: released attention activity matches and preserves running ancestry", () => {
+  const filter = { query: "", state: "attention" as const };
+  const child: AsyncNode = {
+    id: "step:attention", kind: "step", label: "Needs review", state: "running",
+    activity: { state: "needs_attention" },
+  };
+  const root: AsyncNode = {
+    id: "workflow", kind: "workflow", label: "Running workflow", state: "running",
+    activity: { state: "active_long_running" }, children: [child],
+  };
+  assert.equal(matchesRun(child, filter), true);
+  assert.equal(matchesRun(root, filter), false, "ordinary long-running activity is not attention");
+  assert.equal(branchMatches(root, filter), true, "retain non-matching ancestry");
+  assert.equal(branchMatches(root, { ...filter, query: "Needs review" }), true);
+  assert.equal(branchMatches(root, { ...filter, query: "absent" }), false);
+  const ordinary = { ...child, activity: { state: "active_long_running" } };
+  assert.equal(matchesRun(ordinary, filter), false);
+  assert.equal(branchMatches({ ...root, children: [ordinary] }, filter), false);
+});
+
 test("graphOccurrences resets ambiguous duplicate presentations on reorder or content changes only", () => {
   const roots = graphSnapshot().asyncSnapshot!.runs;
   const keys = (nodes: AsyncNode[]) => graphOccurrences(nodes).map((entry) => entry.key);

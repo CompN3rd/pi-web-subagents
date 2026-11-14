@@ -106,14 +106,14 @@ export function graphSnapshot(): StatusData {
       state: "running",
       model: "shared-model",
       startedAt: 1699999940000,
-      activity: { currentTool: graphHostile, turnCount: 3, toolCount: 12, state: "waiting-for-supervisor",
+      activity: { currentTool: graphHostile, turnCount: 3, toolCount: 12, state: "active_long_running",
         currentToolStartedAt: 1699999997000, lastActivityAt: 1699999998000 },
       children: Array.from({ length: 8 }, (_, i) => ({
         id: i < 2 ? "step:99" : `step:${i}`,
         label: "Repeated label",
         kind: "step" as const,
-        state: "complete" as const,
-        ...(i === 1 ? { progressText: "Tests pass; reviewing results. " + graphHostile, progressUpdatedAt: 1699999988000 } : {}),
+        state: i === 1 ? "running" as const : "complete" as const,
+        ...(i === 1 ? { activity: { state: "needs_attention" }, progressText: "Tests pass; reviewing results. " + graphHostile, progressUpdatedAt: 1699999988000 } : {}),
         ...(i === 0
           ? {
               children: [
