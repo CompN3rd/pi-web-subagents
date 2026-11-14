@@ -105,8 +105,10 @@ shipped: the host provides the row surface but no authoritative upstream fleet
 metadata feed was established. See
 [`subagents-parity-leg8-validation.md`](subagents-parity-leg8-validation.md) for
 payload bounds, explicit omitted-field dispositions, label rationale and the
-acceptance matrix. Adapter-local implementation is ready for fresh-context review;
-API-dependent parity and unperformed runtime acceptance remain open.
+acceptance matrix. Independent final review attempt 1 found one adapter-local
+Attention-filter blocker (R1); see [`subagents-parity-review-1.md`](subagents-parity-review-1.md).
+Correction and post-correction review remain pending; API-dependent parity and
+unperformed runtime acceptance remain open.
 
 ## Inventory
 
@@ -130,7 +132,7 @@ Legend:
 | A7 | Current tool, path/argument preview, recent output, turn/tool counts; long-running/needs-attention distinctions | Readable reported tool, tool/turn counts, activity state and age; raw evidence retained | **Partial / supported fields implemented.** Path/arguments and recent output are validated and rendered from supplied parent tool progress (leg 6); they remain absent from the bounded async snapshot. No local timeout/attention verdict invented | U2–U3; U6 activity interface; W1–W2 |
 | A8 | Agent, model, thinking; fresh/fork/mixed context; foreground/background/source distinction | Agent/model/thinking on tree, effort in fleet; no executed-context/source badges | **Partial / supplied fields implemented.** Inline results/progress report model/thinking and explicit fresh/fork/mixed context/background where supplied. The panel snapshot does not report context. Launch-form choice is not evidence of executed context; foreground/background roster completeness still needs a public source | U2–U3; W1–W2 |
 | A9 | Current context window, window peak when formatted, input/output spent; totals in compact fleet | Unlinked fleet rows show input/output/spent/window/peak and observed elapsed | **Implemented / public fleet fields.** Missing windows are unknown; no invented utilization percentage or fleet/tree combined total. Identity-linked per-node usage and persistent compact surface remain API/UI gaps | U1, U3 `itemStats`, U5; W1–W2 |
-| A10 | Queued/running/completed/failed/paused/stopped/rejected/partial; attention and interrupted distinctions | Textual state pills, readable activity, active/attention/other reported-state filtering | **Implemented / supplied states.** Attention is a local filter of reported state/activity/stale-monitor facts, not a pending-request count or liveness diagnosis. Execution, delivery and process proof remain separate | U2–U4; W1–W3 |
+| A10 | Queued/running/completed/failed/paused/stopped/rejected/partial; attention and interrupted distinctions | Textual state pills, readable activity, active/attention/other reported-state filtering | **Correction required (review R1).** Textual supplied states are rendered, but Attention filtering currently misses released `activity.state: "needs_attention"`, hiding affected running children/ancestry. Other filters use reported state/activity/stale-monitor facts, not a pending-request count or liveness diagnosis. Execution, delivery and process proof remain separate | U2–U4; W1–W3 |
 | A11 | Nested fanout tree and chain/parallel groups, role/phase labels, current stage and progress | Bounded nested cards with independently selectable read-only inspectors | **Partial / supported nesting implemented.** Parentage and occurrence selection are preserved; supplied targeted phases/trace are readable (A12). No inferred DAG, child control binding or full workflow denominator | U1–U3; W1–W2 |
 | A12 | Workflow checklist/phase counts, lane role/state, gate/review/acceptance, next action, workspace/ref/output, blocked/stale/watchdog chips, preflight warnings | Supplied targeted trace shows operation/key/phase/label/agent/state/duration/reuse/run reference plus failure kind, stop cause and reuse source | **Partial / bounded trace and inline facts implemented.** Leg 6 validates tool preflight lanes/coverage/warnings, acceptance status/evidence/runtime checks/parent decision and trace errors/warnings. Historical evidence, not a complete plan or percentage. Leg 8 adds bounded supplied graph/phase membership, workflow child inventory, receipt lane claims/source/output references, review findings, watchdog evidence and graph/receipt host monitors. No guesses from labels; unsupported arbitrary outputs, dynamic expansion definitions and artifact/proof structures stay in the host default view, not interpreted as complete plans | U2 `projectAsyncLane`, `renderWorkflowChatProgress`; W2 `projectTool` |
 | A13 | Host-owned monitor steps distinguish role/provider, verdict/reason, stale state and report | Readable monitor kind/provider/role/state/verdict/reason/detail/staleness, explicitly not an agent | **Implemented / existing facts.** Link targets/reports remain omitted pending reviewed public identity/path handling; host steps are not child control targets | U6; W1–W2 |
@@ -246,8 +248,9 @@ method with equivalent ownership/bounds, not private routes or filesystem scans.
 ## Outcome
 
 The approved redesign is in [`subagents-parity-redesign.md`](subagents-parity-redesign.md).
-The adapter-local result is ready for fresh-context review, with fixture validation
-and explicit API/runtime limits. Full upstream parity is **not achieved**.
+Independent review attempt 1 requires correction of the released attention-state
+filter (R1) before approval. Other reviewed fixture evidence and explicit API/runtime
+limits stand. Full upstream parity is **not achieved**.
 Structured child inspection/control, live supervisor inbox/replies, prompt audit,
 detach/drain, catalogs/config and persistent host monitoring remain concrete
 upstream/host dependencies; historical inline cards do not close them.
