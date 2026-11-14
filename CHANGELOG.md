@@ -1,6 +1,15 @@
 # Changelog
 
-## Unreleased
+## Unreleased — 0.88.1 candidate
+
+- Prepare adapter/optional engine mapping 0.88.1 using verified exact released
+  tarball bytes, without installing or bundling the engine. Host remains
+  1.202611.1 (API v5). The bundled RPC bridge is unchanged from 0.84.0; additive
+  progress fields are already supported by the in-progress parity redesign.
+- Record all five intervening engine releases and public contract boundaries in
+  `docs/upstream-0.88.1.md`, including old-run resume incompatibility and the
+  absence of per-child model-facing permission hooks on RPC workflow launches.
+  Mapping verification is not installed-engine or full-parity acceptance.
 
 - Publish verified release artifacts directly to npm through GitHub Actions
   trusted publishing with provenance, rather than staging for npm 2FA approval.

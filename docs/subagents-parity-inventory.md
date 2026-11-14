@@ -8,8 +8,10 @@ browser or daemon has been exercised.
 - Adapter: `@compn3rd/pi-web-subagents@0.84.1`, checkout
   `954461199e225e2a5981e5700a5d612b0473acf6`, pinned engine **0.84.0**.
 - Latest npm release returned by the registry: **pi-subagents 0.88.1**.
-  Registry integrity metadata was read, not independently verified against tarball
-  bytes in this audit. A mapping upgrade still requires normal artifact validation.
+  At the original audit, registry integrity metadata was read but not verified
+  against bytes. **Leg 5 subsequently verified both exact 0.84.0 and 0.88.1
+  tarballs and advanced the source mapping to 0.88.1**; no engine was installed.
+  See [the released artifact audit](upstream-0.88.1.md).
 - Upstream stable tag `v0.88.1` resolves to
   `83cf25f86b6a70ab917a7e198d0153bc32309f29`.
 - Linked changelog/main inspected at
@@ -73,7 +75,8 @@ history, hidden entries, or a supervisor-reply API.
 Leg 1 implements the supported-data portion of A5–A7, A9, A13 and C5. See
 [`subagents-parity-leg1-validation.md`](subagents-parity-leg1-validation.md) for
 checks and boundaries. The original baseline above remains the pre-implementation
-audit; engine mapping is still 0.84.0. Leg 2 adds the fleet/master-detail workspace,
+audit; leg 5 advances the source engine mapping to 0.88.1 after artifact verification.
+Leg 2 adds the fleet/master-detail workspace,
 reported-window filters, nested read-only inspectors, and duplicate-ID admission
 safety (A2, A10–A11, B1–B2, B5–B6). See
 [`subagents-parity-leg2-validation.md`](subagents-parity-leg2-validation.md).
@@ -83,7 +86,12 @@ and readable supplied workflow traces (A11–A13). See
 Leg 4 adds focused mode-specific launch review (C6) and selectable exact schedule
 records, readable details/history, and confirmed changes (C8). See
 [`subagents-parity-leg4-validation.md`](subagents-parity-leg4-validation.md).
-Other rows below remain open unless updated.
+Leg 5 verifies the exact released artifact and updates adapter/engine mapping to
+0.88.1, with unchanged host and RPC surface. See
+[`upstream-0.88.1.md`](upstream-0.88.1.md) and
+[`subagents-parity-leg5-validation.md`](subagents-parity-leg5-validation.md).
+Mapping is not an installed-engine upgrade or runtime acceptance. Other rows
+below remain open unless updated.
 
 ## Inventory
 
@@ -101,7 +109,7 @@ Legend:
 | A1 | Persistent compact FleetView near the editor; active-agent count, panes, context-window and cumulative tokens; expands to main + children | Active count only inside panel; navigation action, no chat fleet summary | **Partial.** Add inline entry summaries and investigate a session-row indicator using public v5 labels. A literal under-editor widget/global counter is not established by this host API. Pane totals are not in fleet RPC | U1, U6; W1, W4; H1 |
 | A2 | Folded one-line widget, adaptive detail/row layouts, expandable runs, explicit `+N more` | Adaptive roster/inspector, expandable branches, reported-window text/state filters and omission counts | **Implemented / panel organization.** Filtering preserves ancestry and native disclosure state, counts matching reported nodes only. No folded global widget; that host-surface boundary remains A1 | U1, U2; W1 |
 | A3 | Foreground live children, recent foreground work, active/recent async children, external display-only jobs | Async tree plus separate collapsed opaque fleet entries | **Partial / API.** Fleet can expose active foreground summary facts, but not their authoritative control identities or the TUI's entire recent/external roster | U3 `collectFleetSnapshot`; U5 `buildFleetStatus`; W1–W2 |
-| A4 | Task or workflow label per child; full wrapped task (up to eight lines) for one expanded background child; bounded line for multiple children | Tree labels; optional fleet goal only under “Further reported agents”; launch task is not a selected-run task view | **Partial.** Expose existing fleet goals. Full selected-child task requires attributable detail: async snapshot deliberately has no `task`. Do not join opaque fleet entries to tree nodes by names | U2 `compactTaskText`/`expandedTaskLines`; U5–U6; W1–W2 |
+| A4 | Task or workflow label per child; full wrapped task (up to eight lines) for one expanded background child; bounded line for multiple children | Tree labels; optional fleet goal only under “Further reported agents”; launch task is not a selected-run task view | **Partial / supplied goals supported.** Fleet goal is rendered when supplied, but the exact 0.88.1 RPC builder does not populate candidate goals. Full selected-child task requires attributable detail: async snapshot deliberately has no `task`. Do not join opaque fleet entries to tree nodes by names | U2 `compactTaskText`/`expandedTaskLines`; U5–U6; W1–W2 |
 | A5 | Latest `contact_supervisor` progress update and age | Readable progress text and snapshot-relative report age | **Implemented / fixtures validated.** Optional bounded `progressText` and `progressUpdatedAt` survive projection; old payloads omit the row. No engine upgrade or live-host proof implied | U2 `reportedProgressRow`; U6 lines 67–68, step projection; W2 |
 | A6 | Elapsed run/child duration, last-activity age, current-tool elapsed time | Readable node elapsed, tool duration, activity/update ages | **Implemented / fixtures validated.** Values use the source snapshot time, not a live wall clock. Terminal rows without an end and missing/inconsistent timestamps remain unknown; supplied zero is preserved | U1–U3; W1–W2 |
 | A7 | Current tool, path/argument preview, recent output, turn/tool counts; long-running/needs-attention distinctions | Readable reported tool, tool/turn counts, activity state and age; raw evidence retained | **Partial / supported fields implemented.** Path/arguments and recent output remain absent from the bounded async snapshot; detailed/tool-entry sources need separate validation. No local timeout/attention verdict invented | U2–U3; U6 activity interface; W1–W2 |
@@ -144,19 +152,21 @@ Legend:
 
 ### Complete custom-message family to consider
 
-U4 registers: supervisor request (constant `SUPERVISOR_REQUEST_MESSAGE_TYPE`),
+U4 registers: supervisor request (`subagent_supervisor_request`, verified from
+0.88.1's `SUPERVISOR_REQUEST_MESSAGE_TYPE`),
 `subagent-supervisor-unanswered`, `subagent-supervisor-blocked`, `subagent-notify`,
 `subagent-completion-unanswered`, `subagent-completion-unhandled`,
 `subagent-wait-subscription`, `subagent-incremental-child-notify`,
 `subagent-workflow-result-write-failed`, `subagent-auto-resume`,
 `subagent_control_notice`, `subagent_steering_notice`, watchdog warning
-(`SUBAGENT_WATCHDOG_WARNING_TYPE`) and `subagent_watchdog_clarification`.
+(`subagent_watchdog_warning`, verified from 0.88.1's
+`SUBAGENT_WATCHDOG_WARNING_TYPE`) and `subagent_watchdog_clarification`.
 The extension also registers slash-result/text renderers. Resolve constant values
 from the selected upstream artifact; do not invent message names. Unknown or
 malformed payloads must retain the generic host view. Private `appendEntry`
 renderers are **not** displayed custom messages.
 
-## Latest release delta versus this adapter's 0.84.0 engine pin
+## Released delta from the original 0.84.0 pin (now mapped to 0.88.1)
 
 | Release | UI / behavior relevant to parity | Meaning for redesign |
 | --- | --- | --- |

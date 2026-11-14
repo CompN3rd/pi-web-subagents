@@ -6,10 +6,17 @@ the execution engine, or replace Pi Web's tracked subsessions.
 
 ## Release status
 
-The 0.84.1 release line targets PI WEB 1.202611.1 and the separately installed
-`pi-subagents@0.84.0` engine. It adopts plugin API v5, shared host controls,
-localizable labels and regional formatting, and fixes observation pausing after
-batched viewport changes. See [compatibility and verification limits](docs/compatibility-1.202611.1.md).
+This checkout prepares adapter **0.88.1** with an exact optional peer mapping to
+separately installed **`pi-subagents@0.88.1`**, targeting PI WEB 1.202611.1 and
+plugin API v5. The released engine tarball has been SHA-512 verified; it has not
+been installed or executed by this work. The adapter-local parity redesign is
+still in progress, including pending inline renderers. This is not a publication
+or full-parity claim. See the [exact engine audit and upgrade cautions](docs/upstream-0.88.1.md).
+
+The earlier 0.84.1 release targeted engine 0.84.0 and adopted shared host controls,
+localizable labels and regional formatting, and observation fixes. Its
+[compatibility evidence](docs/compatibility-1.202611.1.md) is historical, not
+runtime acceptance of this candidate.
 
 Matching release tags start GitHub Actions verification and direct npm
 publication using trusted publishing with provenance. See
@@ -67,7 +74,7 @@ build or tests.
 | Execution engine (separate installation) | Exact `pi-subagents` version/integrity in [`upstream-lock.json`](upstream-lock.json) |
 | Web host | `@jmfederico/pi-web@1.202611.1` |
 | Host plugin APIs | Browser 5 / server 5; stylesheet integration v1 |
-| Node | 24 or newer; development validation uses 24.20.0 |
+| Node | 24 or newer; historical 0.84.1 validation used 24.20.0; current Relay checks use 22.22.2, not Node-24 acceptance |
 
 `upstream-lock.json` records the exact upstream npm tarball and SHA-512 integrity.
 It identifies release inputs, not a runtime attestation of the active daemon or
@@ -141,8 +148,15 @@ supervisor-help chip; it does not remove another plugin's content.
 
 ## Installation after acceptance
 
-Install the upstream engine separately using Pi's package manager. The optional
-peer declaration does not install or activate it for you. Build this adapter
+Install the upstream engine separately using Pi's package manager. **Upgrade
+caution:** engine 0.85 changed recovery provenance; upstream warns that runs
+started before that version cannot be resumed or auto-resumed after upgrading.
+Plan around existing work; this adapter never automatically relaunches it.
+RPC workflow launches also do not receive the model-facing `subagent_launch`
+per-child permission hook: browser confirmation is not equivalent permission
+approval or a sandbox. See the [engine audit](docs/upstream-0.88.1.md).
+
+The optional peer declaration does not install or activate the engine for you. Build this adapter
 before installing a local package: Pi Web does not compile plugin TypeScript.
 There is deliberately no install or package lifecycle hook.
 
@@ -200,7 +214,7 @@ isolated real-host acceptance. No live browser preferences were inspected here.
 
 The browser/server adapter cannot select the SDK used by the already-installed
 execution engine. Upstream **0.79.1 released the embedded-host SDK discovery fix**
-(PR #2947); it is included in the pinned 0.84.0 engine target.
+(PR #2947); it is included in the pinned 0.88.1 engine target.
 This standalone repository contains no engine patch. Keep any existing override
 until the installed engine is upgraded and real foreground/detached lifecycles
 pass without it; a package mapping is not runtime validation.
@@ -227,7 +241,7 @@ npm test
 npm run build
 npm run pack:release
 # Use the validated filename printed by pack:release:
-npm run verify:release -- --tarball artifacts/compn3rd-pi-web-subagents-0.84.1.tgz
+npm run verify:release -- --tarball artifacts/compn3rd-pi-web-subagents-0.88.1.tgz
 ```
 
 The browser is bundled with its dependencies into `dist/browser/index.js`.
