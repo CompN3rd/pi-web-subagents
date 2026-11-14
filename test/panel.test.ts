@@ -16,6 +16,9 @@ import { descendantCount, graphOccurrences } from "../src/browser/graph.ts";
 import { repeat } from "lit/directives/repeat.js";
 import { keyed } from "lit/directives/keyed.js";
 import { guard } from "lit/directives/guard.js";
+import { durationBetween, fleetMetrics, nodeFacts, usageTable } from "../src/browser/presentation.ts";
+import { createContent } from "../src/browser/localization.ts";
+import { localizationFixture } from "./host-fixtures.ts";
 
 const directiveType = (value: unknown) => (value as { _$litDirective$: unknown })._$litDirective$;
 // Expand only the known directives for template inspection, not DOM assertions.
@@ -94,7 +97,7 @@ test("overview combines the graph and collapsed unlinked activity in one section
   assert.equal((content.markup.match(/<section\b/g) ?? []).length, 1);
   assert.match(content.text, /Agents & runs/);
   assert.match(content.markup, /<details class="unlinked-agents">/);
-  assert.match(content.text, /Further reported agents/);
+  assert.match(content.text, /Other reported activity/);
   assert.match(content.text, /fleet entries omitted/);
   assert.match(content.text, /Bounded snapshot/);
 });
@@ -200,6 +203,68 @@ test("panel timestamps are explicit cached snapshots and unresolved cost is a lo
   assert.match(result.text, /lower bound; 2 unresolved/);
   assert.match(result.text, /Cached calculation at/);
 });
+test("A5–A7: readable snapshot timing, activity and progress never require JSON or wall-clock time", () => {
+  const node: AsyncNode = {
+    id: "step:0", kind: "step", label: "worker", state: "running", startedAt: 0,
+    updatedAt: 55_000, progressText: "tests pass\nnext: review", progressUpdatedAt: 50_000,
+    activity: { state: "waiting-for-supervisor", currentTool: "read", currentToolStartedAt: 58_000,
+      lastActivityAt: 59_000, toolCount: 0, turnCount: 3 },
+  };
+  const content = parts(nodeFacts(node, 60_000));
+  for (const value of ["Elapsed", "1m 0s", "Report age at snapshot", "10s", "read", "2s", "1s", "Turns", "Tools", "waiting-for-supervisor", "tests pass\nnext: review"])
+    assert.ok(content.text.includes(value), value);
+  assert.doesNotMatch(content.markup, /<pre|<details/);
+  assert.match(content.markup, /<dt>|<dd>/);
+  assert.equal(durationBetween(undefined, 60_000), "unknown");
+  assert.equal(durationBetween(0, 0), "0s");
+  assert.equal(durationBetween(61_000, 60_000), "unknown");
+  assert.equal(durationBetween(-1, 60_000), "unknown");
+  assert.equal(durationBetween(0.5, 60_000), "unknown");
+  assert.equal(durationBetween(0, Infinity), "unknown");
+  assert.equal(durationBetween(0, 3_661_000), "1h 1m");
+  delete node.progressUpdatedAt;
+  assert.match(parts(nodeFacts(node, 60_000)).text, /Report age at snapshotunknown/);
+  node.state = "complete";
+  assert.match(parts(nodeFacts(node, 60_000)).text, /Elapsedunknown/);
+  node.endedAt = 59_000;
+  assert.match(parts(nodeFacts(node, 60_000)).text, /Elapsed59s/);
+  delete node.progressText;
+  assert.doesNotMatch(parts(nodeFacts(node, 60_000)).text, /Progress report/);
+});
+
+test("A9/A13: fleet metrics stay unlinked and host monitors have readable escaped facts", () => {
+  const metrics = parts(fleetMetrics({ input: 10, output: 20, total: 30, window: 0, windowPeak: 99 }));
+  for (const label of ["Input", "Output", "Cumulative spent tokens", "Current context window", "Peak context window", "99"])
+    assert.ok(metrics.text.includes(label), label);
+  assert.doesNotMatch(metrics.text, /%/);
+  assert.match(parts(fleetMetrics({ input: 0, output: 0, total: 0 })).text, /Current context windowunknown/);
+  const monitor = parts(nodeFacts({ id: "host:check", label: "check", kind: "host-step", state: "failed",
+    hostStep: { provider: "runner", role: "review", state: "held", verdict: "fail", reasonCode: "timeout", detail: graphHostile, stale: true },
+  }));
+  for (const fact of ["Host monitor (not an agent)", "Provider", "runner", "review", "held", "fail", "timeout", "Reported stale", graphHostile])
+    assert.ok(monitor.text.includes(fact), fact);
+  assert.ok(!monitor.markup.includes(graphHostile));
+  assert.doesNotMatch(monitor.markup, /<button|<pre/);
+  const controller = new SubagentsController(() => {});
+  controller.state.status = graphSnapshot();
+  assert.match(parts(overview(controller.state, () => {}, "")).text, /not additional unique agents/);
+});
+
+test("C5: usage table preserves all supplied fields, identities, precision and regional formats", () => {
+  const usage = { input: 1234, output: 23, cacheRead: 4567, cacheWrite: 89, turns: 0, cost: 0.000012345 };
+  const cost = { version: 1 as const, parent: usage, children: [{ label: graphHostile, usage }], childTotal: usage, total: usage, unresolvedAsyncChildren: 0 };
+  const fixture = localizationFixture();
+  fixture.change("en", "de-DE", {});
+  const content = parts(usageTable(cost, createContent(fixture.service)));
+  for (const label of ["Parent", "Child total", "Total", "Input", "Output", "Cache read", "Cache write", "Turns", "Cost (USD)", "identity unavailable", "1.234", "4.567", "0,000012345", "zero unresolved"])
+    assert.ok(content.text.includes(label), label);
+  assert.equal((content.markup.match(/scope="row"/g) ?? []).length, 4);
+  assert.match(content.markup, /<caption>/);
+  assert.match(content.markup, /tabindex="0"/);
+  assert.ok(!content.markup.includes(graphHostile));
+  assert.ok(content.text.includes(graphHostile));
+});
+
 test("panel rendering does not perform peer IO", async () => {
   let calls = 0;
   const panel = new TestPanel();

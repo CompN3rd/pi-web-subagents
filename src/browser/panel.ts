@@ -11,6 +11,7 @@ import { keyed } from "lit/directives/keyed.js";
 import { guard } from "lit/directives/guard.js";
 import { descendantCount, graphOccurrences } from "./graph.js";
 import { englishContent, type PanelContent } from "./localization.js";
+import { durationBetween, fleetMetrics, nodeFacts, usageTable } from "./presentation.js";
 import type {
   PluginSelectionService,
   WorkspacePanelContext,
@@ -37,6 +38,7 @@ export function runTree(
   choose?: (id: string) => void,
   selected = "",
   content = englishContent,
+  snapshotAt?: number,
 ): TemplateResult {
   const { t } = content;
   // Empty guard dependencies set disclosure defaults once, never overriding native toggles on polls.
@@ -69,6 +71,7 @@ export function runTree(
                 ? html` · ${node.model}`
                 : nothing}${node.thinking ? html` · ${t("thinking", { value: node.thinking })}` : nothing}${node.agent ? html` · ${node.agent}` : nothing}
             </div>
+            ${nodeFacts(node, snapshotAt, content)}
             ${node.activity
               ? html`<details class="node-details">
                   <summary>${t("activity")}</summary>
@@ -90,7 +93,7 @@ export function runTree(
                 <summary>
                   ${t(descendants === 1 ? "descendant" : "descendants", { count: content.number(descendants) })}
                 </summary>
-                ${runTree(node.children!, undefined, "", content)}
+                ${runTree(node.children!, undefined, "", content, snapshotAt)}
               </details>`
             : nothing}
         </li>`;
@@ -139,6 +142,7 @@ export function overview(
       ${snapshot
         ? html`<p class="meta">
               ${t("generated", { date: content.date(snapshot.generatedAt) })}
+              ${t("factsAtSnapshot")}
             </p>
             ${snapshot.omitted.runs ||
             snapshot.omitted.children ||
@@ -147,7 +151,7 @@ export function overview(
                   ${t("bounded", { runs: content.number(snapshot.omitted.runs), children: content.number(snapshot.omitted.children), bytes: snapshot.omitted.byteLimitExceeded ? t("byteLimit") : "" })}
                 </p>`
               : nothing}
-            ${runTree(snapshot.runs, choose, selected, content)}${!snapshot.runs.length
+            ${runTree(snapshot.runs, choose, selected, content, snapshot.generatedAt)}${!snapshot.runs.length
               ? html`<p>${t("noRuns")}</p>`
               : nothing}`
         : html`<p>
@@ -156,7 +160,7 @@ export function overview(
       <details class="unlinked-agents">
         <summary>${t("furtherAgents")} · ${fleet ? t("visible", { count: content.number(fleet.entries.length) }) : t("unavailable")}</summary>
       <p class="meta">
-        ${t("unlinked")}
+        ${t("unlinked")} ${t("fleetAtObservation")}
       </p>
       ${fleet
         ? html`<ul class="fleet">
@@ -168,11 +172,10 @@ export function overview(
                       >${entry.role ?? ""} ·
                       ${entry.model ?? t("noModel")}</span
                     >
-                    <p>${entry.goal ?? t("noGoal")}</p>
-                    <small
-                      >${t("tokens", { count: content.number(entry.tokens.total) })} ·
-                      ${entry.effort ?? t("noEffort")}</small
-                    >
+                    <p class="reported-goal">${entry.goal ?? t("noGoal")}</p>
+                    <small>${entry.effort ?? t("noEffort")} ·
+                      ${t("elapsed")}: ${durationBetween(entry.startedAt, state.observedAt, content)}</small>
+                    ${fleetMetrics(entry.tokens, content)}
                   </li>`,
               )}
             </ul>
@@ -779,21 +782,7 @@ ${JSON.stringify(state.schedules.details.schedules, null, 2)}</pre
                 ${this.content.cost(state.cost.total.cost)}
                 <span class="meta">${t("totalCost")}</span>
               </p>
-              <p>
-                ${t("parentChildren", { parent: this.content.cost(state.cost.parent.cost), children: this.content.cost(state.cost.childTotal.cost) })}
-              </p>
-              <ul>
-                ${state.cost.children.map(
-                  (child) =>
-                    html`<li>
-                      ${child.label} · ${this.content.cost(child.usage.cost)}
-                      <span class="meta"
-                        >${child.runId ??
-                        t("noIdentity")}</span
-                      >
-                    </li>`,
-                )}
-              </ul>`
+              ${usageTable(state.cost, this.content)}`
           : html`<p>
               ${t("noCost")}
             </p>`}
@@ -1005,6 +994,38 @@ ${JSON.stringify(state.schedules.details.schedules, null, 2)}</pre
       border-radius: 6px;
       font: 12px/1.6 var(--pi-mono, ui-monospace, monospace);
     }
+    .facts {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px 18px;
+      margin: 10px 0;
+      font-size: 12px;
+    }
+    .facts > div { min-inline-size: 0; }
+    .facts dt { opacity: 0.75; }
+    .facts dd { margin: 0; overflow-wrap: anywhere; }
+    .progress-report, .monitor-facts {
+      border-inline-start: 3px solid var(--pi-accent, Highlight);
+      padding-inline-start: 10px;
+      margin-block: 10px;
+    }
+    .monitor-facts { border-color: var(--pi-warning, #bf8c36); }
+    .progress-report p, .reported-goal { white-space: pre-wrap; }
+    .usage-scroll { overflow-x: auto; }
+    .usage-scroll:focus-visible {
+      outline: 3px solid var(--pi-accent, Highlight);
+      outline-offset: 3px;
+    }
+    .usage-table { border-collapse: collapse; inline-size: 100%; font-size: 12px; }
+    .usage-table caption { text-align: start; font-weight: bold; padding-block: 8px; }
+    .usage-table th, .usage-table td {
+      text-align: end;
+      padding: 8px;
+      border-bottom: 1px solid var(--pi-border, #8885);
+      font-variant-numeric: tabular-nums;
+    }
+    .usage-table th:first-child { text-align: start; overflow-wrap: anywhere; min-inline-size: 120px; }
+    .usage-table small { display: block; font-weight: normal; }
     .activity {
       max-height: 100px;
       margin: 4px 0;

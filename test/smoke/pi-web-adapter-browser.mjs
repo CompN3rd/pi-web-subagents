@@ -165,6 +165,10 @@ try {
   assert.equal(await additionalAgents.getAttribute("open"), null);
   await additionalAgents.locator(":scope > summary").click();
   assert.equal(await additionalAgents.locator(".fleet li").count(), 1);
+  await additionalAgents.getByText("Cumulative spent tokens", { exact: true }).waitFor();
+  assert.match(await additionalAgents.locator(".facts").textContent(), /1,500/);
+  await additionalAgents.getByText("Current context window", { exact: true }).waitFor();
+  assert.equal(await additionalAgents.locator("button").count(), 0);
   await additionalAgents.locator(":scope > summary").click();
   const connected = page.locator(".graph-root").filter({ has: page.getByRole("button", { name: /Connected root/ }) });
   const root = connected.locator("button.run");
@@ -187,6 +191,19 @@ try {
   await branchSummary.focus();
   await page.keyboard.press("Space");
   assert.notEqual(await branch.getAttribute("open"), null);
+  // A5–A7/A13: supported facts are visible without opening JSON disclosures.
+  assert.equal(await connected.locator(".node-details[open]").count(), 0);
+  await connected.getByText("waiting-for-supervisor", { exact: true }).waitFor();
+  const rootFacts = connected.locator(":scope > article > .facts");
+  assert.match(await rootFacts.textContent(), /Elapsed\s*1m 0s/);
+  assert.match(await rootFacts.textContent(), /Tool elapsed at snapshot\s*3s/);
+  assert.match(await rootFacts.textContent(), /Last activity age\s*2s/);
+  const progress = connected.locator(".progress-report");
+  await progress.getByText("Progress report", { exact: true }).waitFor();
+  assert.match(await progress.textContent(), /Report age at snapshot: 12s/);
+  assert.match(await progress.textContent(), /Tests pass; reviewing results/);
+  await connected.getByText("Host monitor (not an agent)", { exact: true }).waitFor();
+  await connected.getByText("Reported stale", { exact: true }).waitFor();
   await connected.getByText("Activity details", { exact: true }).click();
   assert.equal(await connected.locator(".node-details[open]").count(), 1);
   assert.equal(await connected.getByText("Deepest ", { exact: false }).count(), 1);
@@ -310,6 +327,17 @@ try {
   await page.waitForTimeout(2200);
   assert.equal((await mutationCalls()).filter((call) => call.method === "spawn").length, 1, "unknown receipt never auto retries");
   await page.getByText("New agent, script, or workflow", { exact: true }).click();
+
+  // C5: accounting remains explicit and has readable cache/turn columns.
+  const costsBefore = (await mutationCalls()).filter((call) => call.method === "cost").length;
+  await page.getByRole("button", { name: "Calculate cost", exact: true }).click();
+  await page.getByRole("columnheader", { name: "Cache read", exact: true }).waitFor();
+  await page.getByRole("columnheader", { name: "Cache write", exact: true }).waitFor();
+  await page.getByRole("columnheader", { name: "Turns", exact: true }).waitFor();
+  assert.equal(await page.locator(".usage-table tbody tr").count(), 3);
+  assert.match(await page.locator(".usage-table").textContent(), /Parent[\s\S]*Child total[\s\S]*Total/);
+  await page.waitForTimeout(2200);
+  assert.equal((await mutationCalls()).filter((call) => call.method === "cost").length, costsBefore + 1);
 
   await page.screenshot({
     path: join(artifacts, "desktop.png"),
@@ -471,6 +499,9 @@ try {
       "live translated labels, RTL and theme tokens preserve draft/selection without execution",
       "stylesheet/localization registrations release on unmount",
       "escaped output",
+      "A5–A7/A13: progress/age, tool duration, activity, counts and monitor facts visible without JSON",
+      "A9: unlinked fleet input/output/spent/window metrics, no control targets",
+      "C5: accessible on-demand usage table including caches and turns; no accounting polling",
       "stop requires confirmation",
       "cancel/confirm focus",
       "scope clears drafts/confirmation",

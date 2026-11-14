@@ -9,6 +9,7 @@ import {
   RPC_METHODS,
 } from "../src/protocol.ts";
 import { input, dataFor } from "./fixtures/rpc/fake-bus.ts";
+import { snapshot } from "./browser-fixtures.ts";
 
 const params = {
   ping: {},
@@ -34,6 +35,41 @@ for (const method of RPC_METHODS) {
     assert.ok(!JSON.stringify(reply).includes("private"));
   });
 }
+test("A5: snapshot progress is optional, bounded and round-trips without private data", () => {
+  const data = snapshot(true);
+  const expected = input();
+  const node = data.asyncSnapshot.runs[0]!.children[0]! as Record<string, unknown>;
+  const parse = () => parseRpcReply({ version: 1, requestId: expected.requestId, success: true, data }, expected);
+  assert.doesNotMatch(JSON.stringify(parse()), /progressText|progressUpdatedAt/);
+  node.progressText = '<img src=x onerror="evil()">';
+  node.progressUpdatedAt = 0;
+  node.task = "private task not projected";
+  const projected = parse();
+  assert.ok(!("kind" in projected) && projected.success && projected.method === "status");
+  if (!("kind" in projected) && projected.success && projected.method === "status") {
+    const child = projected.data.asyncSnapshot!.runs[0]!.children![0]!;
+    assert.equal(child.progressText, node.progressText);
+    assert.equal(child.progressUpdatedAt, 0);
+  }
+  assert.doesNotMatch(JSON.stringify(projected), /private task/);
+  assert.deepEqual(parseRpcReply(projected, expected), projected);
+  node.progressText = "x".repeat(160);
+  assert.doesNotThrow(parse);
+  node.progressText = "x".repeat(161);
+  assert.throws(parse, /bounds/);
+  for (const text of [12, null, "null\0byte"]) {
+    node.progressText = text;
+    assert.throws(parse);
+  }
+  node.progressText = "ok";
+  for (const time of [-1, 0.1, Number.NaN, Infinity, Number.MAX_SAFE_INTEGER + 1, "0", null]) {
+    node.progressUpdatedAt = time;
+    assert.throws(parse);
+  }
+  delete node.progressUpdatedAt;
+  assert.doesNotThrow(parse, "progress without a timestamp remains usable");
+});
+
 test("protocol exact schedule allowlist, required identity and quiet only for run", () => {
   for (const action of MANAGEMENT_ACTIONS) {
     const p = action === "schedule.list" ? { action } : { action, id: "daily" };

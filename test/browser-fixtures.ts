@@ -95,6 +95,7 @@ export function graphSnapshot(): StatusData {
     role: "reviewer",
     model: "shared-model",
     effort: "high",
+    tokens: { input: 1200, output: 300, total: 1500, window: 900, windowPeak: 1000 },
     goal: graphHostile + "x".repeat(400),
   };
   data.asyncSnapshot!.runs = [
@@ -104,12 +105,15 @@ export function graphSnapshot(): StatusData {
       kind: "workflow",
       state: "running",
       model: "shared-model",
-      activity: { currentTool: graphHostile, turnCount: 3 },
+      startedAt: 1699999940000,
+      activity: { currentTool: graphHostile, turnCount: 3, toolCount: 12, state: "waiting-for-supervisor",
+        currentToolStartedAt: 1699999997000, lastActivityAt: 1699999998000 },
       children: Array.from({ length: 8 }, (_, i) => ({
         id: i < 2 ? "step:99" : `step:${i}`,
         label: "Repeated label",
         kind: "step" as const,
         state: "complete" as const,
+        ...(i === 1 ? { progressText: "Tests pass; reviewing results. " + graphHostile, progressUpdatedAt: 1699999988000 } : {}),
         ...(i === 0
           ? {
               children: [
@@ -118,7 +122,7 @@ export function graphSnapshot(): StatusData {
                   label: "Grandchild",
                   kind: "host-step" as const,
                   state: "failed" as const,
-                  hostStep: { detail: graphHostile, stale: true },
+                  hostStep: { provider: "fixture-monitor", role: "review", state: "held", verdict: "fail", reasonCode: "timeout", detail: graphHostile, stale: true },
                   children: [
                     {
                       id: "deep-" + "x".repeat(150),

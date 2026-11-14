@@ -93,20 +93,27 @@ see the validation boundaries below.
 
 | Upstream surface | Web disposition |
 | --- | --- |
-| Fleet/live async status | Workspace panel; omissions and stale state must remain visible |
+| Fleet/live async status | Workspace panel; readable progress, snapshot-relative timing/activity, host monitors and unlinked token/window metrics; omissions and stale state remain visible |
 | Run output/transcripts | Explicit targeted status requests; text fallback |
 | Single-agent/workflow launch | Existing async RPC; upstream admission and capability limits remain authoritative |
 | Steer/interrupt/stop/resume | Explicit controls using authoritative run identities |
-| Costs | On-demand report, including unresolved-child lower-bound warning |
+| Costs | On-demand parent/child/total table with input/output, caches, turns and USD cost; timestamp and incomplete-accounting warnings |
 | Existing schedules | RPC list/show/history/pause/resume/run/delete only |
 | Supervisor questions/replies | Ordinary parent conversation/tool workflow; **no direct reply-card API** |
 | Agent/model/config editing | Existing upstream commands/dialogs; not a new web configuration editor |
-| Rich inline tool/message rendering | Not exposed by this host API; panel presentation instead |
+| Rich inline tool/message rendering | Available in pinned host API v5; adapter integration is pending. This does not expose structured child transcripts or hidden custom entries |
 | TUI widgets, overlays and keybindings | Not ported literally |
 | Child-scoped controls | Display only; whole-run controls avoid ambiguous child identities |
 | Activity refresh and receipts | Bounded event-driven observation with 5s reconciliation; older engines poll at 2s active/10s idle; up to 20 in-memory receipts (not persistent) |
 | Host background-run counter | No equivalent public reporting hook established |
 | Pi Web tracked subsessions | Separate built-in system; not adopted as pi-subagents runs |
+
+The in-progress [parity inventory](docs/subagents-parity-inventory.md) tracks the
+adapter-local redesign and remaining public API dependencies. Snapshot durations
+and progress ages are fixed to the snapshot generation time, not browser render
+time; fleet elapsed values use the last successful observation. Progress fields
+are optional (older engine payloads omit them). No installed engine upgrade is
+implied by displaying a newer public field.
 
 A supervisor helper can prepare an ordinary message for the parent agent to
 inspect pending requests. Preparing a draft is **not sending it or answering a

@@ -85,6 +85,8 @@ export type AsyncNode = {
   agent?: string;
   model?: string;
   thinking?: string;
+  progressText?: string;
+  progressUpdatedAt?: number;
   activity?: JsonObject;
   hostStep?: JsonObject;
   children?: AsyncNode[];
@@ -492,6 +494,8 @@ function projectNode(raw: unknown, depth: number): AsyncNode {
       agent: "string",
       model: "string",
       thinking: "string",
+      progressText: "string",
+      progressUpdatedAt: "count",
     },
     ["id", "label"],
   );
