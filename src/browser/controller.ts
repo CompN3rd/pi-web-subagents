@@ -367,6 +367,12 @@ export class SubagentsController {
         )
       )
         throw new Error("Capability unavailable for this operation");
+      // Defense in depth: occurrence selection is display-only when root IDs repeat.
+      // Recovery reads may legitimately reference IDs absent from the bounded roster.
+      const targetedId = "params" in input && input.params && "id" in input.params ? input.params.id : undefined;
+      if (["status", "stop", "interrupt", "resume", "steer"].includes(method) && targetedId &&
+        (this.state.status?.asyncSnapshot?.runs.filter((run) => run.id === targetedId).length ?? 0) > 1)
+        throw new Error("Ambiguous duplicate run ID; targeted operations are disabled");
       const mutation = isMutation(input);
       if (mutation && method !== "steer" && !confirmed)
         throw new Error("Explicit confirmation required");

@@ -93,7 +93,7 @@ try {
   assert.equal(await page.locator("#control-heading").count(), 0);
   await page.locator("button.run").first().click();
   await page.getByRole("heading", { name: /Details & controls/ }).waitFor();
-  const stop = page.getByRole("button", { name: "Stop run…", exact: true });
+  const stop = page.getByRole("button", { name: "Stop entire run…", exact: true });
   await stop.click();
   assert.equal(
     await page.evaluate(
@@ -170,13 +170,13 @@ try {
   await additionalAgents.getByText("Current context window", { exact: true }).waitFor();
   assert.equal(await additionalAgents.locator("button").count(), 0);
   await additionalAgents.locator(":scope > summary").click();
-  const connected = page.locator(".graph-root").filter({ has: page.getByRole("button", { name: /Connected root/ }) });
-  const root = connected.locator("button.run");
+  const connected = page.locator(".graph-root").filter({ has: page.getByRole("button", { name: /Connected root/, includeHidden: true }) });
+  const root = connected.locator(":scope > article button.run");
   const branch = connected.locator(":scope > details.branch-disclosure");
   const branchSummary = branch.locator(":scope > summary");
-  assert.equal(await graph.locator("button.run").count(), 4);
+  assert.equal(await graph.locator("button.run").count(), 16);
   assert.equal(await graph.locator(".node-card").count(), 16);
-  assert.equal(await graph.locator(".graph-child button").count(), 0);
+  assert.equal(await graph.locator(".graph-child button").count(), 12);
   assert.equal(await page.locator(".fleet button").count(), 0);
   assert.equal(await branch.getAttribute("open"), null);
   await page.getByText("Bounded snapshot:", { exact: false }).waitFor();
@@ -184,6 +184,8 @@ try {
   // Native Tab/Enter/Space interaction, not an incomplete ARIA tree widget.
   await page.locator("#runs-heading").focus();
   await page.keyboard.press("Tab");
+  assert.equal(await page.getByLabel("Filter reported nodes").evaluate((element) => element.getRootNode().activeElement === element), true);
+  await root.focus();
   assert.equal(await root.evaluate((element) => element.getRootNode().activeElement === element), true);
   await page.keyboard.press("Enter");
   assert.equal(await root.getAttribute("aria-pressed"), "true");
@@ -270,7 +272,23 @@ try {
   assert.equal(await page.locator("#runs-heading").evaluate((element) => element.getRootNode().activeElement === element), true);
   assert.equal(await page.locator("#control-heading").count(), 0);
   await page.getByRole("button", { name: "Duplicate B", exact: true }).click();
-  assert.equal(await graph.locator('button.run[aria-pressed="true"]').count(), 2, "duplicate upstream IDs remain the same authoritative target");
+  assert.equal(await graph.locator('button.run[aria-pressed="true"]').count(), 1, "duplicate occurrences have distinct display selection");
+  await page.getByText("Read-only snapshot.", { exact: false }).waitFor();
+  assert.equal(await stop.count(), 0);
+  assert.equal(await page.getByRole("button", { name: "Load transcript", exact: true }).count(), 0);
+  assert.deepEqual(await mutationCalls(), beforeGraph);
+  await connected.getByRole("button", { name: /Deepest / }).click();
+  await page.getByText("Read-only snapshot.", { exact: false }).waitFor();
+  assert.equal(await stop.count(), 0);
+  await page.getByRole("button", { name: "Back to reported runs", exact: true }).click();
+  const search = page.getByLabel("Filter reported nodes");
+  await search.fill("Isolated root");
+  assert.equal(await graph.locator(".graph-root:visible").count(), 0, "removed nodes cannot match a filter");
+  await search.fill("Connected root");
+  assert.equal(await graph.locator(".graph-root:visible").count(), 1);
+  await search.fill("");
+  assert.equal(await graph.locator(".graph-root:visible").count(), 3);
+  assert.notEqual(await branch.getAttribute("open"), null, "filtering preserves disclosures");
   await root.click();
   await page.locator('textarea[name="message"]').fill("graph scope draft");
   await page.evaluate(() => window.fixture.switchSession("session-graph"));
@@ -287,7 +305,7 @@ try {
   await refresh();
   await page.getByRole("alert").filter({ hasText: "fixture disconnected" }).waitFor();
   await page.getByText("Stale cached snapshot", { exact: false }).waitFor();
-  assert.equal(await graph.locator("button.run").count(), 3);
+  assert.equal(await graph.locator("button.run").count(), 15);
   await page.evaluate(() => window.fixture.setFailure(false));
   await refresh();
   await page.evaluate(() => window.fixture.setGraph("empty"));
@@ -300,6 +318,20 @@ try {
   await refresh();
   await page.getByText("Controls require an authoritative", { exact: false }).waitFor();
   assert.equal(await page.locator("#control-heading").count(), 0);
+  await page.evaluate(() => window.fixture.setGraph("graph"));
+  await refresh();
+  await root.click();
+  await branchSummary.click();
+
+  // A root becoming ambiguous while confirmation is open must revoke admission.
+  const beforeAmbiguous = await mutationCalls();
+  await stop.click();
+  await page.getByRole("button", { name: "Confirm stop", exact: true }).waitFor();
+  await page.evaluate(() => window.fixture.duplicateRoot("run-1"));
+  await refresh();
+  assert.equal(await page.getByRole("button", { name: "Confirm stop", exact: true }).count(), 0);
+  assert.equal(await page.locator("#control-heading").count(), 0);
+  assert.deepEqual(await mutationCalls(), beforeAmbiguous);
   await page.evaluate(() => window.fixture.setGraph("graph"));
   await refresh();
   await root.click();
@@ -349,9 +381,9 @@ try {
   await page.emulateMedia({ colorScheme: "dark" });
   await page.evaluate(() => { document.body.style.background = "#151820"; document.body.style.color = "#e4e8ee"; });
   await page.setViewportSize({ width: 375, height: 844 });
-  await root.focus();
-  await page.keyboard.press("Space");
-  assert.equal(await root.getAttribute("aria-pressed"), "true");
+  assert.equal(await graph.isVisible(), false, "mobile inspector is a drill-in");
+  await page.getByRole("button", { name: "Back to reported runs", exact: true }).click();
+  assert.equal(await graph.isVisible(), true);
   assert.ok((await root.boundingBox()).height >= 44);
   assert.ok((await branchSummary.boundingBox()).height >= 44);
   await branchSummary.focus();
@@ -359,6 +391,10 @@ try {
   assert.equal(await branch.getAttribute("open"), null);
   await page.keyboard.press("Space");
   assert.notEqual(await branch.getAttribute("open"), null);
+  await root.focus();
+  await page.keyboard.press("Space");
+  assert.equal(await root.getAttribute("aria-pressed"), "true");
+  assert.equal(await page.locator("#control-heading").evaluate((element) => element.getRootNode().activeElement === element), true);
   const mobileVisibility = [];
   const recordMobileVisibility = async (phase) => {
     mobileVisibility.push(await stop.evaluate((element, phase) => {
@@ -383,7 +419,7 @@ try {
   try {
     await page.waitForFunction(() => {
       const panel = document.querySelector("body>div").firstElementChild;
-      return [...panel.shadowRoot.querySelectorAll("button")].some((button) => button.textContent.trim() === "Stop run…" && !button.disabled);
+      return [...panel.shadowRoot.querySelectorAll("button")].some((button) => button.textContent.trim() === "Stop entire run…" && !button.disabled);
     });
   } catch (error) {
     console.error("Mobile readiness diagnostics", await page.evaluate(async () => {
@@ -431,8 +467,9 @@ try {
   await page.screenshot({ path: join(artifacts, "mobile-light.png"), fullPage: true });
   await page.emulateMedia({ forcedColors: "active" });
   await page.screenshot({ path: join(artifacts, "mobile-forced-colors.png"), fullPage: true });
-  await root.focus();
-  assert.equal(await root.evaluate((element) => element.getRootNode().activeElement === element), true);
+  const back = page.getByRole("button", { name: "Back to reported runs", exact: true });
+  await back.focus();
+  assert.equal(await back.evaluate((element) => element.getRootNode().activeElement === element), true);
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth), false);
   await page.emulateMedia({ forcedColors: "none" });
   // Live localization and palette updates must not replace drafts, selection,
@@ -511,7 +548,8 @@ try {
       "duplicate-ID activity and branch disclosures retain on unchanged polls and safely reset on reorder",
       "mobile Stop explicitly scrolled into view before capability-enabled wait/click",
       "scope resets selection/disclosures; stale/empty/unavailable warnings",
-      "root-only stop/interrupt/steer; uncertain spawn does not retry",
+      "unique-root-only stop/interrupt/steer; duplicate and nested read-only inspectors; uncertain spawn does not retry",
+      "reported-window filtering preserves disclosures; mobile inspector drill-in and Back focus",
       "375px dark/light/forced-colors screenshots and containment",
       "hidden observation pause",
       "unmount cleanup",

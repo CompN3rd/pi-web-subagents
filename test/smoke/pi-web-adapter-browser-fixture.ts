@@ -111,6 +111,10 @@ Object.assign(window, {
         ? graphSnapshot().asyncSnapshot!.runs[0]!.children![0]!.children
         : [];
     },
+    duplicateRoot(id: string) {
+      const root = status.asyncSnapshot!.runs.find((node) => node.id === id)!;
+      status.asyncSnapshot!.runs.push({ ...root, label: `${root.label} duplicate` });
+    },
     removeRoot(id: string) {
       status.asyncSnapshot!.runs = status.asyncSnapshot!.runs.filter(
         (root) => root.id !== id,

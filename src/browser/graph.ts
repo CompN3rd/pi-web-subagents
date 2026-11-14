@@ -1,5 +1,41 @@
 import type { AsyncNode } from "../protocol.js";
 
+export interface GraphEntry {
+  node: AsyncNode;
+  key: string;
+  path: string[];
+  /** Only a unique top-level occurrence can identify a whole-run operation. */
+  controlId?: string;
+}
+
+export function graphEntries(nodes: AsyncNode[], parent: string[] = []): GraphEntry[] {
+  return graphOccurrences(nodes).flatMap(({ node, key }) => {
+    const path = [...parent, key];
+    return [{ node, key: JSON.stringify(path), path,
+      ...(parent.length === 0 && nodes.filter((root) => root.id === node.id).length === 1
+        ? { controlId: node.id } : {}),
+    }, ...graphEntries(node.children ?? [], path)];
+  });
+}
+
+export type RunFilter = { query: string; state: "all" | "active" | "attention" | "recent" };
+export const noFilter: RunFilter = { query: "", state: "all" };
+const activeStates = new Set(["running", "queued", "pending", "starting", "waiting"]);
+const attentionStates = new Set(["failed", "rejected", "partial", "blocked", "paused", "stopped", "attention", "waiting-for-supervisor"]);
+export function matchesRun(node: AsyncNode, filter: RunFilter): boolean {
+  const query = filter.query.trim().toLocaleLowerCase();
+  const text = [node.id, node.label, node.agent, node.model, node.thinking, node.state,
+    node.progressText, node.activity?.state, node.activity?.currentTool].join(" ").toLocaleLowerCase();
+  const active = activeStates.has(node.state);
+  const attention = attentionStates.has(node.state) || attentionStates.has(String(node.activity?.state)) || node.hostStep?.stale === true;
+  return (!query || text.includes(query)) && (filter.state === "all" ||
+    (filter.state === "active" && active) || (filter.state === "attention" && attention) ||
+    (filter.state === "recent" && !active));
+}
+export function branchMatches(node: AsyncNode, filter: RunFilter): boolean {
+  return matchesRun(node, filter) || (node.children ?? []).some((child) => branchMatches(child, filter));
+}
+
 export function descendantCount(node: AsyncNode): number {
   return (node.children ?? []).reduce(
     (count, child) => count + 1 + descendantCount(child),

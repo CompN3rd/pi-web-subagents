@@ -12,7 +12,7 @@ import {
 import { SubagentsController } from "../src/browser/controller.ts";
 import { parseRpcReply, type AsyncNode, type StatusData } from "../src/protocol.ts";
 import { graphHostile, graphSnapshot, panelContext, snapshot, tick } from "./browser-fixtures.ts";
-import { descendantCount, graphOccurrences } from "../src/browser/graph.ts";
+import { branchMatches, descendantCount, graphEntries, graphOccurrences, matchesRun } from "../src/browser/graph.ts";
 import { repeat } from "lit/directives/repeat.js";
 import { keyed } from "lit/directives/keyed.js";
 import { guard } from "lit/directives/guard.js";
@@ -75,7 +75,7 @@ class TestPanel extends SubagentsPanel {
   }
 }
 
-test("panel overview reports omitted/unavailable projections; only top-level IDs selectable", () => {
+test("panel overview reports omitted/unavailable projections; nested snapshots selectable", () => {
   const controller = new SubagentsController(() => {});
   const empty = parts(overview(controller.state, () => {}, ""));
   assert.match(empty.text, /Fleet projection unavailable/);
@@ -87,7 +87,7 @@ test("panel overview reports omitted/unavailable projections; only top-level IDs
   const tree = parts(
     runTree(controller.state.status.asyncSnapshot!.runs, () => {}, "run-1"),
   );
-  assert.equal((tree.markup.match(/<button/g) ?? []).length, 1);
+  assert.equal((tree.markup.match(/<button/g) ?? []).length, 2);
   assert.ok(!tree.text.includes("opaque-not-a-run"));
 });
 test("overview combines the graph and collapsed unlinked activity in one section", () => {
@@ -133,7 +133,7 @@ test("panel template has accessible labels, errors, receipts and full operation 
   const panel = new TestPanel();
   panel.controller.state.error = "missing extension";
   panel.controller.state.status = snapshot() as StatusData;
-  (panel as unknown as { selected: string }).selected = "run-1";
+  (panel as unknown as { selected: string }).selected = graphEntries(panel.controller.state.status.asyncSnapshot!.runs)[0]!.key;
   const result = parts(panel.template());
   for (const expected of [
     "Subagents supervision",
@@ -148,7 +148,7 @@ test("panel template has accessible labels, errors, receipts and full operation 
     "manual send",
     "Request receipts",
     "Capabilities & boundaries",
-    "Stop run",
+    "Stop entire run",
     "Interrupt run",
   ])
     assert.ok((result.markup + result.text).includes(expected), expected);
@@ -165,7 +165,7 @@ test("run controls require a current root and use its escaped label", () => {
   panel.controller.state.status = snapshot() as StatusData;
   const root = panel.controller.state.status.asyncSnapshot!.runs[0]!;
   root.label = "<img src=x> Example run";
-  (panel as unknown as { selected: string }).selected = root.id;
+  (panel as unknown as { selected: string }).selected = graphEntries([root])[0]!.key;
   const content = parts(panel.template());
   assert.match(content.text, /Details & controls/);
   assert.ok(content.text.includes(root.label));
@@ -437,18 +437,18 @@ test("graph fixtures are parser-valid, and a large accepted forest loses no node
   assert.doesNotThrow(validate);
   const content = parts(runTree(data.asyncSnapshot!.runs, () => {}));
   assert.equal((content.markup.match(/<article/g) ?? []).length, 180);
-  assert.equal((content.markup.match(/<button/g) ?? []).length, 20);
+  assert.equal((content.markup.match(/<button/g) ?? []).length, 180);
 });
 
-test("graph forest preserves ancestry, duplicate occurrences and root-only callback targets", () => {
+test("graph forest preserves ancestry and selects occurrence keys, never inferred targets", () => {
   const data = graphSnapshot();
   const roots = data.asyncSnapshot!.runs;
   const selected: string[] = [];
-  const tree = runTree(roots, (id) => selected.push(id), "run-2");
+  const tree = runTree(roots, (id) => selected.push(id), graphEntries(roots).find((entry) => entry.node.id === "run-2")!.key);
   const content = parts(tree);
   assert.equal(descendantCount(roots[0]!), 10);
   assert.equal((content.markup.match(/<article/g) ?? []).length, 16);
-  assert.equal((content.markup.match(/<button/g) ?? []).length, roots.length);
+  assert.equal((content.markup.match(/<button/g) ?? []).length, 16);
   assert.equal((content.markup.match(/<ul/g) ?? []).length, 6);
   assert.ok(content.text.includes("grandchild"));
   assert.ok(content.text.includes("paused"));
@@ -461,11 +461,43 @@ test("graph forest preserves ancestry, duplicate occurrences and root-only callb
       if (text.includes("@click=")) (template.values[index] as () => void)();
     });
   }
-  assert.deepEqual(selected, roots.map((root) => root.id));
+  assert.deepEqual(selected, graphEntries(roots).map((entry) => entry.key));
   assert.ok(!selected.includes("step:99"));
   assert.ok(!selected.includes("grandchild"));
   const keys = graphOccurrences(roots).map((entry) => entry.key);
   assert.equal(graphOccurrences([...roots].reverse()).find((entry) => entry.node.id === "run-2")!.key, keys[1]);
+});
+
+test("A2/B1: nested and duplicate occurrences are readable but never control targets", () => {
+  const panel = new TestPanel();
+  panel.controller.state.status = graphSnapshot();
+  const roots = panel.controller.state.status.asyncSnapshot!.runs;
+  const entries = graphEntries(roots);
+  assert.equal(new Set(entries.map((entry) => entry.key)).size, entries.length);
+  assert.deepEqual(entries.filter((entry) => entry.controlId).map((entry) => entry.controlId), ["run-1", "run-2"]);
+  for (const entry of entries.filter((entry) => !entry.controlId)) {
+    (panel as unknown as { selected: string }).selected = entry.key;
+    const content = parts(panel.template());
+    assert.match(content.text, /Read-only snapshot/);
+    assert.ok(content.text.includes(entry.node.label));
+    assert.ok(!content.text.includes("Load transcript"));
+    assert.ok(!content.text.includes("Stop entire run"));
+  }
+  const before = graphEntries(roots).find((entry) => entry.node.id === "grandchild")!;
+  roots.reverse();
+  assert.equal(graphEntries(roots).find((entry) => entry.node.id === "grandchild")!.key, before.key);
+});
+
+test("A2: filters match reported facts and keep ancestry without fabricating history", () => {
+  const roots = graphSnapshot().asyncSnapshot!.runs;
+  const query = { query: "grandchild", state: "all" as const };
+  assert.equal(matchesRun(roots[0]!, query), false);
+  assert.equal(branchMatches(roots[0]!, query), true);
+  assert.equal(branchMatches(roots[1]!, query), false);
+  assert.equal(matchesRun({ ...roots[0]!, state: "running" }, { query: "", state: "active" }), true);
+  assert.equal(matchesRun({ ...roots[0]!, state: "failed" }, { query: "", state: "attention" }), true);
+  assert.equal(matchesRun({ ...roots[0]!, state: "complete", activity: undefined }, { query: "", state: "attention" }), false);
+  assert.equal(matchesRun({ ...roots[0]!, state: "complete" }, { query: "", state: "recent" }), true);
 });
 
 test("graphOccurrences resets ambiguous duplicate presentations on reorder or content changes only", () => {

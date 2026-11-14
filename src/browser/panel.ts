@@ -9,7 +9,7 @@ import {
 import { repeat } from "lit/directives/repeat.js";
 import { keyed } from "lit/directives/keyed.js";
 import { guard } from "lit/directives/guard.js";
-import { descendantCount, graphOccurrences } from "./graph.js";
+import { branchMatches, descendantCount, graphEntries, graphOccurrences, matchesRun, noFilter, type RunFilter } from "./graph.js";
 import { englishContent, type PanelContent } from "./localization.js";
 import { durationBetween, fleetMetrics, nodeFacts, usageTable } from "./presentation.js";
 import type {
@@ -39,30 +39,33 @@ export function runTree(
   selected = "",
   content = englishContent,
   snapshotAt?: number,
+  path: string[] = [],
+  filter: RunFilter = noFilter,
 ): TemplateResult {
   const { t } = content;
   // Empty guard dependencies set disclosure defaults once, never overriding native toggles on polls.
-  return html`<ul class=${choose ? "tree forest" : "tree branches"}>
+  return html`<ul class=${path.length === 0 ? "tree forest" : "tree branches"}>
     ${repeat(
       graphOccurrences(nodes),
       (entry) => entry.key,
-      ({ node }) => {
+      ({ node, key }) => {
+        const selectionKey = JSON.stringify([...path, key]);
         const descendants = descendantCount(node);
-        return html`<li class=${choose ? "graph-root" : "graph-child"}>
+        return html`<li class=${path.length === 0 ? "graph-root" : "graph-child"} ?hidden=${!branchMatches(node, filter)}>
           <article
             class="node-card"
-            data-selected=${!!choose && node.id === selected}
+            data-selected=${!!choose && selectionKey === selected}
           >
             <div class="run-row">
               ${choose
                 ? html`<button
                     class="ui-button run"
-                    aria-pressed=${node.id === selected}
-                    @click=${() => choose(node.id)}
+                    aria-pressed=${selectionKey === selected}
+                    @click=${() => choose(selectionKey)}
                   >${node.label}</button>`
                 : html`<strong>${node.label}</strong>`}
               <span class="pill" data-state=${node.state}>${node.state}</span>
-              ${choose && node.id === selected
+              ${choose && selectionKey === selected
                 ? html`<span class="selected-label">${t("selected")}</span>`
                 : nothing}
             </div>
@@ -93,7 +96,7 @@ export function runTree(
                 <summary>
                   ${t(descendants === 1 ? "descendant" : "descendants", { count: content.number(descendants) })}
                 </summary>
-                ${runTree(node.children!, undefined, "", content, snapshotAt)}
+                ${runTree(node.children!, choose, selected, content, snapshotAt, [...path, key], filter)}
               </details>`
             : nothing}
         </li>`;
@@ -106,10 +109,13 @@ export function overview(
   choose: (id: string) => void,
   selected: string,
   content = englishContent,
+  filter: RunFilter = noFilter,
+  filterControls: TemplateResult | typeof nothing = nothing,
 ): TemplateResult {
   const { t } = content;
   const fleet = state.status?.fleet;
   const snapshot = state.status?.asyncSnapshot;
+  const entries = graphEntries(snapshot?.runs ?? []);
   return html`<section aria-labelledby="runs-heading" aria-describedby="graph-description">
       <h2 id="runs-heading" tabindex="-1">
         ${t("runs")}
@@ -139,6 +145,7 @@ export function overview(
       <p id="graph-description" class="meta">
         ${t("graphNote")}
       </p>
+      ${filterControls}
       ${snapshot
         ? html`<p class="meta">
               ${t("generated", { date: content.date(snapshot.generatedAt) })}
@@ -151,7 +158,8 @@ export function overview(
                   ${t("bounded", { runs: content.number(snapshot.omitted.runs), children: content.number(snapshot.omitted.children), bytes: snapshot.omitted.byteLimitExceeded ? t("byteLimit") : "" })}
                 </p>`
               : nothing}
-            ${runTree(snapshot.runs, choose, selected, content, snapshot.generatedAt)}${!snapshot.runs.length
+            <p class="meta" role="status">${t("filterCount", { count: content.number(entries.filter(({ node }) => matchesRun(node, filter)).length), total: content.number(entries.length) })}</p>
+            ${runTree(snapshot.runs, choose, selected, content, snapshot.generatedAt, [], filter)}${!snapshot.runs.length
               ? html`<p>${t("noRuns")}</p>`
               : nothing}`
         : html`<p>
@@ -261,6 +269,7 @@ export class SubagentsPanel extends LitElement {
   private offSelection: (() => void) | undefined;
   private listenedLifetime: AbortSignal | undefined;
   private selected = "";
+  private filter: RunFilter = { ...noFilter };
   private confirmation: Confirmation | undefined;
   private notice = "";
   private formScope = "";
@@ -312,9 +321,13 @@ export class SubagentsPanel extends LitElement {
     super.disconnectedCallback();
   }
   protected override willUpdate(): void {
+    if (this.selected && !this.selectedEntry()) {
+      this.selected = "";
+      this.confirmation = undefined;
+    }
     const focused = this.shadowRoot?.activeElement;
     this.graphFocus =
-      focused instanceof HTMLElement && focused.closest(".graph-root")
+      focused instanceof HTMLElement && (focused.closest(".graph-root") || focused.closest(".inspector"))
         ? focused
         : undefined;
   }
@@ -351,6 +364,7 @@ export class SubagentsPanel extends LitElement {
     if (key !== this.formScope) {
       this.formScope = key;
       this.selected = "";
+      this.filter = { ...noFilter };
       this.confirmation = undefined;
       this.notice = "";
       // Uncontrolled form drafts must never migrate into a different conversation.
@@ -363,23 +377,27 @@ export class SubagentsPanel extends LitElement {
       !this.controller.state.busy && this.controller.supports(method, action)
     );
   }
-  private choose = (id: string): void => {
+  private selectedEntry() {
+    return graphEntries(this.controller.state.status?.asyncSnapshot?.runs ?? []).find((entry) => entry.key === this.selected);
+  }
+  private choose = (key: string): void => {
     this.sync();
-    if (
-      this.controller.state.status?.asyncSnapshot?.runs.some((r) => r.id === id)
-    ) {
-      this.selected = id;
+    if (graphEntries(this.controller.state.status?.asyncSnapshot?.runs ?? []).some((entry) => entry.key === key)) {
+      this.selected = key;
       this.confirmation = undefined;
       this.requestUpdate();
+      void this.updateComplete.then(() => this.renderRoot.querySelector<HTMLElement>("#control-heading")?.focus());
     }
   };
-  private hasRun(): boolean {
-    return (
-      !!this.selected &&
-      !!this.controller.state.status?.asyncSnapshot?.runs.some(
-        (r) => r.id === this.selected,
-      )
-    );
+  private back = (): void => {
+    this.selected = "";
+    this.confirmation = undefined;
+    this.requestUpdate();
+    void this.updateComplete.then(() => this.renderRoot.querySelector<HTMLElement>("#runs-heading")?.focus());
+  };
+  private hasRun(id: unknown): boolean {
+    const target = this.selectedEntry()?.controlId;
+    return !this.controller.state.stale && !!target && target === id;
   }
   private operate(method: RpcMethod, params: JsonObject): void {
     const initiatingScope = this.formScope;
@@ -391,8 +409,8 @@ export class SubagentsPanel extends LitElement {
     )
       return;
     if (
-      ["stop", "interrupt", "resume", "steer"].includes(method) &&
-      (!this.hasRun() || params.id !== this.selected)
+      (["stop", "interrupt", "resume", "steer"].includes(method) || (method === "status" && !!params.id)) &&
+      !this.hasRun(params.id)
     )
       return;
     const needsConfirmation =
@@ -439,7 +457,8 @@ export class SubagentsPanel extends LitElement {
     if (
       pending &&
       pending.scope === this.formScope &&
-      this.controller.available
+      this.controller.available &&
+      (!["stop", "interrupt", "resume", "steer"].includes(pending.method) || this.hasRun(pending.params.id))
     )
       void this.controller.perform(pending.method, pending.params, true);
     this.restoreConfirmationFocus(pending);
@@ -490,10 +509,10 @@ export class SubagentsPanel extends LitElement {
   protected override render(): TemplateResult {
     const { t } = this.content;
     const state = this.controller.state;
-    const selectedRun = state.status?.asyncSnapshot?.runs.find(
-      (run) => run.id === this.selected,
-    );
-    const disabledRun = !selectedRun;
+    const entry = this.selectedEntry();
+    const selectedRun = entry?.node;
+    const target = entry?.controlId;
+    const disabledRun = !target || state.stale;
     return html`<main
       aria-label=${t("supervision")}
       dir=${this.content.localization?.direction ?? "ltr"}
@@ -547,15 +566,33 @@ export class SubagentsPanel extends LitElement {
           ${t("boundaries")}
         </p>
       </details>
-      ${keyed(this.formScope, overview(state, this.choose, this.selected, this.content))}
-      ${selectedRun ? keyed(JSON.stringify([this.formScope, this.selected]), html`<section aria-labelledby="control-heading">
-        <h2 id="control-heading">${selectedRun.label} — ${t("controls")}</h2>
-        <p>${t("target")} <code>${this.selected}</code></p>
+      <div class="fleet-workspace" data-inspecting=${!!selectedRun}>
+      <div class="roster">
+      ${keyed(this.formScope, overview(state, this.choose, this.selected, this.content, this.filter, html`
+        <div class="filters">
+          <label>${t("filterRuns")}<input type="search" .value=${this.filter.query} @input=${(event: Event) => {
+            this.filter = { ...this.filter, query: (event.target as HTMLInputElement).value };
+            this.requestUpdate();
+          }} /></label>
+          <label>${t("filterState")}<select class="ui-select" .value=${this.filter.state} @change=${(event: Event) => {
+            this.filter = { ...this.filter, state: (event.target as HTMLSelectElement).value as RunFilter["state"] };
+            this.requestUpdate();
+          }}><option value="all">${t("allRuns")}</option><option value="active">${t("activeRuns")}</option><option value="attention">${t("attentionRuns")}</option><option value="recent">${t("recentRuns")}</option></select></label>
+        </div>`))}
+      </div>
+      ${selectedRun ? keyed(JSON.stringify([this.formScope, this.selected]), html`<section class="inspector" aria-labelledby="control-heading">
+        <button class="ui-button" @click=${this.back}>${t("backToRuns")}</button>
+        <h2 id="control-heading" tabindex="-1">${selectedRun.label} — ${t("controls")}</h2>
+        <p><span class="pill" data-state=${selectedRun.state}>${selectedRun.state}</span> · ${selectedRun.kind} · <code>${selectedRun.id}</code></p>
+        <p class="meta">${[selectedRun.agent, selectedRun.model, selectedRun.thinking].filter(Boolean).join(" · ")}</p>
+        ${nodeFacts(selectedRun, state.status?.asyncSnapshot?.generatedAt, this.content)}
+        <details><summary>${t("snapshotEvidence")}</summary><pre>${JSON.stringify(selectedRun, null, 2)}</pre></details>
+        ${target ? html`<p>${t("target")} <code>${target}</code></p>
         <form
           @submit=${(event: Event) => {
             const data = this.form(event);
             this.operate("status", {
-              id: this.selected,
+              id: target,
               view: "transcript",
               lines: Number(data.get("lines")),
             });
@@ -582,14 +619,14 @@ export class SubagentsPanel extends LitElement {
         <div class="actions">
           <button class="ui-button"
             ?disabled=${disabledRun || !this.supports("interrupt")}
-            @click=${() => this.operate("interrupt", { id: this.selected })}
+            @click=${() => this.operate("interrupt", { id: target })}
           >
             ${t("interrupt")}
           </button>
           <button
             class="ui-button danger"
             ?disabled=${disabledRun || !this.supports("stop")}
-            @click=${() => this.operate("stop", { id: this.selected })}
+            @click=${() => this.operate("stop", { id: target })}
           >
             ${t("stop")}
           </button>
@@ -599,7 +636,7 @@ export class SubagentsPanel extends LitElement {
             const data = this.form(event);
             const method = String(data.get("action")) as "steer" | "resume";
             this.operate(method, {
-              id: this.selected,
+              id: target,
               message: String(data.get("message")),
               ...(method === "steer" ? { mode: String(data.get("mode")) } : {}),
             });
@@ -642,7 +679,7 @@ export class SubagentsPanel extends LitElement {
         <p class="meta">
           ${t("controlNote")}
         </p>
-        ${state.transcript && state.transcriptId === this.selected
+        ${state.transcript && state.transcriptId === target
           ? html`<h3>${t("targetedOutput")} · ${state.transcriptId}</h3>
               <p class="meta">${t("lastRead")}</p>
               <pre tabindex="0" aria-label=${t("outputLabel")}>
@@ -657,7 +694,9 @@ ${JSON.stringify(state.transcript.details, null, 2)}</pre
                   </details>`
                 : nothing}`
           : nothing}
-      </section>`) : nothing}
+        ` : html`<p class="warning">${t("readOnlyNode")}</p>`}
+      </section>`) : html`<section class="inspector"><p>${t("chooseRun")}</p></section>`}
+      </div>
       <section>
         <h2>${t("launch")}</h2>
         <details>
@@ -1035,6 +1074,17 @@ ${JSON.stringify(state.schedules.details.schedules, null, 2)}</pre
     .receipts {
       list-style: none;
       padding: 0;
+    }
+    [hidden] { display: none !important; }
+    .fleet-workspace { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+    .roster, .inspector { min-inline-size: 0; }
+    .filters { display: flex; flex-wrap: wrap; gap: 12px; }
+    .filters label { flex: 1; min-inline-size: 120px; }
+    .fleet-workspace .forest { grid-template-columns: minmax(0, 1fr); }
+    @media (max-width: 760px) {
+      .fleet-workspace { grid-template-columns: minmax(0, 1fr); }
+      .fleet-workspace[data-inspecting="true"] .roster { display: none; }
+      .fleet-workspace[data-inspecting="false"] .inspector { display: none; }
     }
     .forest,
     .fleet {

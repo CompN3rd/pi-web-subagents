@@ -38,6 +38,20 @@ async function setup(
   await tick();
   return { controller, clock, calls, context, signals };
 }
+test("criterion 3: duplicate root IDs reject all targeted reads and controls before transport", async () => {
+  const h = await setup();
+  const root = h.controller.state.status!.asyncSnapshot!.runs[0]!;
+  h.controller.state.status!.asyncSnapshot!.runs.push({ ...root });
+  const before = h.calls.length;
+  for (const method of ["status", "stop", "interrupt", "resume", "steer"] as const) {
+    await h.controller.perform(method, { id: root.id, ...(["resume", "steer"].includes(method) ? { message: "hello" } : {}) }, true);
+    assert.match(h.controller.state.error, /Ambiguous duplicate/);
+  }
+  assert.equal(h.calls.length, before);
+  assert.equal(h.controller.receipts.length, 0);
+  h.controller.unmount();
+});
+
 test("controller exact selection excludes mismatched, archived, pending and missing identities", () => {
   const context = panelContext();
   assert.equal(selectedScope(context)?.sessionId, "session-1");
