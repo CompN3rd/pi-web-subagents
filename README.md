@@ -10,11 +10,12 @@ This checkout prepares adapter **0.88.1** with an exact optional peer mapping to
 separately installed **`pi-subagents@0.88.1`**, targeting PI WEB 1.202611.1 and
 plugin API v5. The released engine tarball has been SHA-512 verified; it has not
 been installed or executed by this work. The adapter-local redesign is implemented
-and awaiting fresh-context review: fleet/inspector, usage, schedules, launch and
-bounded inline tool/custom-message cards have fixture evidence. These are
+and independently approved for its agreed scope: fleet/inspector, usage,
+schedules, launch and bounded inline tool/custom-message cards have fixture evidence. These are
 **public-API parity improvements, with enumerated full-parity blockers**, not a
-publication or full-parity claim. See the [acceptance evidence and limits](docs/subagents-parity-leg8-validation.md)
-and [exact engine audit and upgrade cautions](docs/upstream-0.88.1.md).
+publication or full-parity claim. See the [final review and validation limits](docs/subagents-parity-review-2.md),
+[acceptance evidence](docs/subagents-parity-leg8-validation.md) and
+[exact engine audit and upgrade cautions](docs/upstream-0.88.1.md).
 
 The earlier 0.84.1 release targeted engine 0.84.0 and adopted shared host controls,
 localizable labels and regional formatting, and observation fixes. Its

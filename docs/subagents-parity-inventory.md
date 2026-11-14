@@ -109,8 +109,9 @@ acceptance matrix. Independent final review attempt 1 found one adapter-local
 Attention-filter blocker (R1); see [`subagents-parity-review-1.md`](subagents-parity-review-1.md).
 Leg 10 corrects R1 with unit and built-browser regression evidence; see
 [`subagents-parity-leg10-validation.md`](subagents-parity-leg10-validation.md).
-Post-correction review remains pending; API-dependent parity and unperformed
-runtime acceptance remain open.
+Independent post-correction review approves the adapter-local result; see
+[`subagents-parity-review-2.md`](subagents-parity-review-2.md). API-dependent parity
+and unperformed runtime acceptance remain open.
 
 ## Inventory
 
@@ -134,7 +135,7 @@ Legend:
 | A7 | Current tool, path/argument preview, recent output, turn/tool counts; long-running/needs-attention distinctions | Readable reported tool, tool/turn counts, activity state and age; raw evidence retained | **Partial / supported fields implemented.** Path/arguments and recent output are validated and rendered from supplied parent tool progress (leg 6); they remain absent from the bounded async snapshot. No local timeout/attention verdict invented | U2–U3; U6 activity interface; W1–W2 |
 | A8 | Agent, model, thinking; fresh/fork/mixed context; foreground/background/source distinction | Agent/model/thinking on tree, effort in fleet; no executed-context/source badges | **Partial / supplied fields implemented.** Inline results/progress report model/thinking and explicit fresh/fork/mixed context/background where supplied. The panel snapshot does not report context. Launch-form choice is not evidence of executed context; foreground/background roster completeness still needs a public source | U2–U3; W1–W2 |
 | A9 | Current context window, window peak when formatted, input/output spent; totals in compact fleet | Unlinked fleet rows show input/output/spent/window/peak and observed elapsed | **Implemented / public fleet fields.** Missing windows are unknown; no invented utilization percentage or fleet/tree combined total. Identity-linked per-node usage and persistent compact surface remain API/UI gaps | U1, U3 `itemStats`, U5; W1–W2 |
-| A10 | Queued/running/completed/failed/paused/stopped/rejected/partial; attention and interrupted distinctions | Textual state pills, readable activity, active/attention/other reported-state filtering | **Implemented / R1 corrected, post-correction review pending.** Textual supplied states are rendered. Attention filtering includes released `activity.state: "needs_attention"` and preserves running ancestry; `active_long_running` alone is not attention (leg 10 unit/browser regressions). Filters use reported state/activity/stale-monitor facts, not a pending-request count or liveness diagnosis. Execution, delivery and process proof remain separate | U2–U4; W1–W3 |
+| A10 | Queued/running/completed/failed/paused/stopped/rejected/partial; attention and interrupted distinctions | Textual state pills, readable activity, active/attention/other reported-state filtering | **Implemented / R1 corrected and independently approved (review 2).** Textual supplied states are rendered. Attention filtering includes released `activity.state: "needs_attention"` and preserves running ancestry; `active_long_running` alone is not attention (leg 10 unit/browser regressions). Filters use reported state/activity/stale-monitor facts, not a pending-request count or liveness diagnosis. Execution, delivery and process proof remain separate | U2–U4; W1–W3 |
 | A11 | Nested fanout tree and chain/parallel groups, role/phase labels, current stage and progress | Bounded nested cards with independently selectable read-only inspectors | **Partial / supported nesting implemented.** Parentage and occurrence selection are preserved; supplied targeted phases/trace are readable (A12). No inferred DAG, child control binding or full workflow denominator | U1–U3; W1–W2 |
 | A12 | Workflow checklist/phase counts, lane role/state, gate/review/acceptance, next action, workspace/ref/output, blocked/stale/watchdog chips, preflight warnings | Supplied targeted trace shows operation/key/phase/label/agent/state/duration/reuse/run reference plus failure kind, stop cause and reuse source | **Partial / bounded trace and inline facts implemented.** Leg 6 validates tool preflight lanes/coverage/warnings, acceptance status/evidence/runtime checks/parent decision and trace errors/warnings. Historical evidence, not a complete plan or percentage. Leg 8 adds bounded supplied graph/phase membership, workflow child inventory, receipt lane claims/source/output references, review findings, watchdog evidence and graph/receipt host monitors. No guesses from labels; unsupported arbitrary outputs, dynamic expansion definitions and artifact/proof structures stay in the host default view, not interpreted as complete plans | U2 `projectAsyncLane`, `renderWorkflowChatProgress`; W2 `projectTool` |
 | A13 | Host-owned monitor steps distinguish role/provider, verdict/reason, stale state and report | Readable monitor kind/provider/role/state/verdict/reason/detail/staleness, explicitly not an agent | **Implemented / existing facts.** Link targets/reports remain omitted pending reviewed public identity/path handling; host steps are not child control targets | U6; W1–W2 |
@@ -251,8 +252,10 @@ method with equivalent ownership/bounds, not private routes or filesystem scans.
 
 The approved redesign is in [`subagents-parity-redesign.md`](subagents-parity-redesign.md).
 Independent review attempt 1 identified the released attention-state filter gap
-(R1), corrected in leg 10 with regression evidence. Fresh post-correction review
-remains pending. Other reviewed fixture evidence and explicit API/runtime limits stand. Full upstream parity is **not achieved**.
+(R1), corrected in leg 10 with regression evidence. Independent post-correction
+review attempt 2 approves the agreed adapter-local result and closes the Relay.
+Reviewed fixture evidence and explicit API/runtime limits stand. Full upstream
+parity is **not achieved**.
 Structured child inspection/control, live supervisor inbox/replies, prompt audit,
 detach/drain, catalogs/config and persistent host monitoring remain concrete
 upstream/host dependencies; historical inline cards do not close them.
