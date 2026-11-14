@@ -27,6 +27,10 @@ let listener: any;
 let fail = false;
 let uncertain = false;
 let output: string | undefined;
+let schedules = [
+  { id: "schedule-1", name: '<img src=x onerror="window.evil=true"> Daily checks', paused: false, quiet: true, lastRunId: "read-only-ref" },
+  { id: "schedule-2", name: "Weekly review", paused: true },
+];
 let status = snapshot(true) as ReturnType<typeof graphSnapshot>;
 const context = panelContext(async (input) => {
   calls.push(input);
@@ -40,6 +44,12 @@ const context = panelContext(async (input) => {
       outcome: "unknown",
       message: "Fixture uncertain launch; do not repeat",
     };
+  if (input.method === "manage") return reply(input, { text: `Original ${input.params?.action} text`, details: { schedules:
+    input.params?.action === "schedule.history" ? { runs: [
+      { id: "history-1", scheduleId: input.params.id, state: "failed", error: '<img src=x onerror="window.evil=true"> literal history error', asyncId: "read-only-ref" },
+      { id: "unrelated-history", scheduleId: "not-selected", state: "complete" },
+    ] } : { records: input.params?.action === "schedule.list" ? schedules : schedules.filter((record) => record.id === input.params?.id) },
+  } });
   return reply(
     input,
     input.method === "status"
@@ -128,6 +138,8 @@ Object.assign(window, {
       );
     },
     setOutput(value: string | undefined) { output = value; },
+    duplicateSchedule() { schedules.push({ ...schedules[0]! }); },
+    removeSchedule(id: string) { schedules = schedules.filter((record) => record.id !== id); },
     setFailure(value: boolean) {
       fail = value;
     },

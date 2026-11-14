@@ -398,7 +398,11 @@ try {
     assert.equal("childId" in call.params, false);
   }
   await page.evaluate(() => window.fixture.setUncertain(true));
-  await page.getByText("New agent, script, or workflow", { exact: true }).click();
+  // C6: focused form is explicitly opened; only the current mode's fields exist.
+  await page.getByRole("button", { name: "New run", exact: true }).focus();
+  await page.keyboard.press("Enter");
+  assert.equal(await page.locator("#launch-heading").evaluate((element) => element.getRootNode().activeElement === element), true);
+  assert.equal(await page.locator('textarea[name="args"]').count(), 0);
   await page.locator('textarea[name="source"]').fill("worker");
   await page.locator('textarea[name="task"]').fill("fixture task");
   await page.getByRole("button", { name: "Review launch…", exact: true }).click();
@@ -406,7 +410,80 @@ try {
   await page.getByText("spawn · unknown", { exact: true }).waitFor();
   await page.waitForTimeout(2200);
   assert.equal((await mutationCalls()).filter((call) => call.method === "spawn").length, 1, "unknown receipt never auto retries");
-  await page.getByText("New agent, script, or workflow", { exact: true }).click();
+  const spawnCall = (await mutationCalls()).find((call) => call.method === "spawn");
+  assert.equal("model" in spawnCall.params, false, "blank model inherits");
+  await page.locator('select[name="kind"]').selectOption("workflow");
+  assert.equal(await page.locator('textarea[name="task"]').count(), 0);
+  assert.equal(await page.locator('textarea[name="source"]').inputValue(), "", "mode switch clears source");
+  await page.locator('textarea[name="source"]').fill("workflow.yaml");
+  await page.locator('textarea[name="args"]').fill("[]");
+  await page.getByRole("button", { name: "Review launch…", exact: true }).click();
+  await page.getByText("Invalid launch arguments:", { exact: false }).waitFor();
+  assert.equal(await page.locator(".confirmation").count(), 0);
+  await page.locator('textarea[name="args"]').fill('{"goal":"read-only fixture"}');
+  await page.locator('input[name="model"]').fill("provider/explicit");
+  await page.getByRole("button", { name: "Review launch…", exact: true }).click();
+  assert.match(await page.locator(".confirmation").textContent(), /workflow.yaml[\s\S]*provider\/explicit/);
+  assert.doesNotMatch(await page.locator(".confirmation pre").textContent(), /"task"/);
+  assert.equal(await page.locator(".confirmation").evaluate((element) => getComputedStyle(element).color !== getComputedStyle(document.body).color), true, "Canvas fallback must pair with CanvasText, not an inherited dark-theme foreground");
+  await page.locator(".confirmation").screenshot({ path: join(artifacts, "launch-review.png") });
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  await page.locator('select[name="kind"]').selectOption("script");
+  assert.equal(await page.locator('textarea[name="source"]').inputValue(), "");
+  assert.equal(await page.locator('textarea[name="args"]').inputValue(), "");
+  await page.getByRole("button", { name: "Close launch form", exact: true }).click();
+  assert.equal(await page.locator("#new-run").evaluate((element) => element.getRootNode().activeElement === element), true);
+  assert.equal((await mutationCalls()).filter((call) => call.method === "spawn").length, 1);
+
+  // C8: selectable exact records, cached provenance, escaped details/history and all seven actions.
+  const schedulesButton = page.getByRole("button", { name: "List schedules", exact: true });
+  const scheduleCalls = () => page.evaluate(() => window.fixture.calls.filter((call) => call.method === "manage"));
+  assert.equal((await scheduleCalls()).length, 0);
+  await schedulesButton.click();
+  const scheduleRow = page.locator(".schedule-list button").first();
+  await scheduleRow.waitFor();
+  await scheduleRow.click();
+  assert.equal(await page.locator("#schedule-heading").evaluate((element) => element.getRootNode().activeElement === element), true);
+  assert.match(await page.locator(".schedule-detail").textContent(), /next-run time[\s\S]*unknown/);
+  assert.equal(await page.locator(".schedule-list img").count(), 0);
+  await page.getByRole("button", { name: "Read details", exact: true }).click();
+  await page.getByText("Last detail read (cached)", { exact: true }).waitFor();
+  assert.equal(await page.locator(".schedule-list button").count(), 2, "detail read preserves list");
+  await page.getByRole("button", { name: "Read history", exact: true }).click();
+  await page.locator(".schedule-history").waitFor();
+  assert.match(await page.locator(".schedule-history").textContent(), /history-1[\s\S]*failed[\s\S]*literal history error/);
+  assert.doesNotMatch(await page.locator(".schedule-history").textContent(), /unrelated-history/);
+  assert.equal(await page.locator(".schedule-history img, .schedule-history button").count(), 0);
+  await page.locator("#schedules-section").screenshot({ path: join(artifacts, "schedule-history.png") });
+  await page.setViewportSize({ width: 375, height: 844 });
+  await page.locator("#schedules-section").screenshot({ path: join(artifacts, "schedule-history-mobile.png") });
+  assert.equal(await page.locator("#schedules-section").evaluate((section) => section.scrollWidth <= section.clientWidth), true);
+  await page.setViewportSize({ width: 1150, height: 1000 });
+  for (const [name, action] of [["Pause…", "pause"], ["Resume schedule…", "resume"], ["Run now…", "run"], ["Delete schedule…", "delete"]]) {
+    const before = (await scheduleCalls()).length;
+    await page.getByRole("button", { name, exact: true }).click();
+    assert.equal((await scheduleCalls()).length, before, "review is not mutation");
+    assert.match(await page.locator(".confirmation").textContent(), new RegExp(`schedule\\.${action}[\\s\\S]*schedule-1`));
+    await page.getByRole("button", { name: "Cancel", exact: true }).click();
+    assert.equal((await scheduleCalls()).length, before);
+    await page.getByRole("button", { name, exact: true }).click();
+    await page.getByRole("button", { name: "Confirm manage", exact: true }).click();
+    await page.waitForFunction((count) => window.fixture.calls.filter((call) => call.method === "manage").length === count, before + 1);
+    assert.deepEqual((await scheduleCalls()).at(-1).params, { action: `schedule.${action}`, id: "schedule-1" });
+  }
+  await page.getByRole("button", { name: "Pause…", exact: true }).click();
+  await page.evaluate(() => window.fixture.duplicateSchedule());
+  await schedulesButton.click();
+  await page.getByText("Select a schedule to read details/history or review a change.", { exact: true }).waitFor();
+  assert.equal(await page.locator(".confirmation").count(), 0, "ambiguous list revokes confirmation");
+  assert.equal(await page.locator(".schedule-list button:disabled").count(), 2);
+  await page.locator(".schedule-list button:not(:disabled)").click();
+  await page.getByRole("button", { name: "Delete schedule…", exact: true }).click();
+  await page.evaluate(() => window.fixture.removeSchedule("schedule-2"));
+  await schedulesButton.click();
+  await page.getByText("Select a schedule to read details/history or review a change.", { exact: true }).waitFor();
+  assert.equal(await page.locator(".confirmation").count(), 0, "removed schedule revokes confirmation");
+  assert.equal(await page.evaluate(() => window.evil), undefined);
 
   // C5: accounting remains explicit and has readable cache/turn columns.
   const costsBefore = (await mutationCalls()).filter((call) => call.method === "cost").length;
@@ -590,6 +667,8 @@ try {
       "A5–A7/A13: progress/age, tool duration, activity, counts and monitor facts visible without JSON",
       "A9: unlinked fleet input/output/spent/window metrics, no control targets",
       "C5: accessible on-demand usage table including caches and turns; no accounting polling",
+      "C6: focused keyboard-opened launch, mode-only fields, cleared mode drafts, JSON-object validation, inherited/explicit model, readable confirmation, focus restoration",
+      "C8: on-demand selectable schedules, exact detail/history, escaped evidence, cached list survives reads, all seven actions, four confirmed mutations, duplicate/removal revokes pending action, narrow-screen containment",
       "stop requires confirmation",
       "cancel/confirm focus",
       "scope clears drafts/confirmation",

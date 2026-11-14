@@ -19,6 +19,8 @@ import { guard } from "lit/directives/guard.js";
 import { durationBetween, fleetMetrics, nodeFacts, usageTable, workflowTrace } from "../src/browser/presentation.ts";
 import { createContent } from "../src/browser/localization.ts";
 import { localizationFixture } from "./host-fixtures.ts";
+import { launchParams } from "../src/browser/launch.ts";
+import { selectableSchedule, scheduleFacts, scheduleHistory } from "../src/browser/schedules.ts";
 
 const directiveType = (value: unknown) => (value as { _$litDirective$: unknown })._$litDirective$;
 // Expand only the known directives for template inspection, not DOM assertions.
@@ -74,6 +76,50 @@ class TestPanel extends SubagentsPanel {
     return this.render();
   }
 }
+
+test("C6: launch confirmation uses only mode-relevant fields and omits blank model overrides", () => {
+  const data = new FormData();
+  for (const [key, value] of Object.entries({ kind: "agent", source: "worker", task: "task", args: "not json", model: "  ", context: "fresh" })) data.set(key, value);
+  assert.deepEqual(launchParams(data), { agent: "worker", task: "task", async: true, context: "fresh" });
+  data.set("kind", "workflow");
+  assert.throws(() => launchParams(data));
+  for (const value of ["[]", "null", "42"]) {
+    data.set("args", value);
+    assert.throws(() => launchParams(data));
+  }
+  data.set("args", '{"goal":"<script>literal</script>"}');
+  data.set("model", "provider/model");
+  assert.deepEqual(launchParams(data), { workflow: "worker", args: { goal: "<script>literal</script>" }, model: "provider/model", async: true, context: "fresh" });
+  data.set("kind", "script");
+  data.delete("args");
+  assert.equal(launchParams(data).args, undefined);
+  data.set("kind", "unexpected");
+  assert.throws(() => launchParams(data));
+});
+
+test("C8: selectable schedules use unique protocol-valid exact IDs, never labels or positions", () => {
+  const records = [{ id: "safe-id", name: "same", paused: false }, { id: "other", name: "same", paused: false }];
+  assert.equal(selectableSchedule(records, "safe-id"), true);
+  assert.equal(selectableSchedule(records, "same"), false);
+  assert.equal(selectableSchedule([...records, records[0]!], "safe-id"), false);
+  for (const id of ["", "../unsafe", "a".repeat(65), "<img>"]) assert.equal(selectableSchedule([{ id }], id), false);
+  assert.equal(selectableSchedule(undefined, "safe-id"), false);
+});
+
+test("C8: schedule facts and exact history are readable escaped evidence with unknown timing", () => {
+  const hostile = '<img src=x onerror="evil()">';
+  const facts = parts(scheduleFacts({ id: "s-1", name: hostile, paused: false, quiet: true }));
+  for (const value of ["s-1", hostile, "No", "Yes", "unknown", "next-run time"]) assert.ok(facts.text.includes(value), value);
+  assert.doesNotMatch(facts.markup, /<img|onerror/);
+  const history = parts(scheduleHistory([
+    { id: "h-1", scheduleId: "s-1", state: "failed", error: hostile, asyncId: "read-only" },
+    { id: "h-2", scheduleId: "s-2", state: "must-not-appear" },
+  ], "s-1"));
+  for (const value of ["h-1", "failed", hostile, "read-only", "unknown"]) assert.ok(history.text.includes(value), value);
+  assert.doesNotMatch(history.text, /must-not-appear|h-2/);
+  assert.doesNotMatch(history.markup, /<img|<button|onerror/);
+  assert.match(parts(scheduleHistory(undefined, "s-1")).text, /No history rows supplied/);
+});
 
 test("A11–A13: workflow trace presents reported phases, host operations, reuse, failures and references without controls", () => {
   const hostile = '<img src=x onerror="evil()">';

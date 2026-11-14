@@ -8,6 +8,7 @@ import {
   parseRpcReply,
   type CostData,
   type JsonValue,
+  type JsonObject,
   type PingData,
   type RpcInput,
   type RpcMethod,
@@ -96,6 +97,11 @@ export interface PanelState {
   outputFollowing: boolean;
   outputError: string;
   schedules: ToolData | undefined;
+  schedulesAt: number | undefined;
+  scheduleAction: string;
+  scheduleTarget: string;
+  scheduleRecords: JsonObject[] | undefined;
+  scheduleRecordsAt: number | undefined;
   cost: CostData | undefined;
   costAt: number | undefined;
 }
@@ -115,6 +121,11 @@ const initial = (): PanelState => ({
   outputFollowing: false,
   outputError: "",
   schedules: undefined,
+  schedulesAt: undefined,
+  scheduleAction: "",
+  scheduleTarget: "",
+  scheduleRecords: undefined,
+  scheduleRecordsAt: undefined,
   cost: undefined,
   costAt: undefined,
 });
@@ -536,7 +547,18 @@ export class SubagentsController {
           this.state.transcript = reply.data;
           this.state.transcriptAt = this.time.now();
         }
-        if (reply.method === "manage") this.state.schedules = reply.data;
+        if (reply.method === "manage" && input.method === "manage" && input.params) {
+          this.state.schedules = reply.data;
+          this.state.schedulesAt = this.time.now();
+          this.state.scheduleAction = input.params.action;
+          this.state.scheduleTarget = input.params.id ?? "";
+          // A show/history/mutation response is not a replacement list. Never
+          // join arbitrary response records into the cached selection authority.
+          if (input.params.action === "schedule.list") {
+            this.state.scheduleRecords = reply.data.details?.schedules?.records;
+            this.state.scheduleRecordsAt = this.time.now();
+          }
+        }
         if (reply.method === "cost") {
           this.state.cost = reply.data;
           this.state.costAt = this.time.now();

@@ -7,6 +7,8 @@ import {
   type TemplateResult,
 } from "lit";
 import { repeat } from "lit/directives/repeat.js";
+import { launchParams } from "./launch.js";
+import { selectableSchedule, scheduleFacts, scheduleHistory } from "./schedules.js";
 import { keyed } from "lit/directives/keyed.js";
 import { guard } from "lit/directives/guard.js";
 import { branchMatches, descendantCount, graphEntries, graphOccurrences, matchesRun, noFilter, type RunFilter } from "./graph.js";
@@ -274,6 +276,9 @@ export class SubagentsPanel extends LitElement {
   private outputLines = 80;
   private filter: RunFilter = { ...noFilter };
   private confirmation: Confirmation | undefined;
+  private selectedSchedule = "";
+  private launchOpen = false;
+  private launchKind = "agent";
   private notice = "";
   private formScope = "";
   private active = false;
@@ -327,6 +332,10 @@ export class SubagentsPanel extends LitElement {
     if (this.selected && !this.selectedEntry()) {
       this.selected = "";
       this.confirmation = undefined;
+    }
+    if (this.selectedSchedule && !selectableSchedule(this.controller.state.scheduleRecords, this.selectedSchedule)) {
+      this.selectedSchedule = "";
+      if (this.confirmation?.method === "manage") this.confirmation = undefined;
     }
     this.controller.selectOutput(this.selectedEntry()?.controlId ?? "");
     const focused = this.shadowRoot?.activeElement;
@@ -385,6 +394,9 @@ export class SubagentsPanel extends LitElement {
       this.autoScrollOutput = true;
       this.outputLines = 80;
       this.filter = { ...noFilter };
+      this.selectedSchedule = "";
+      this.launchOpen = false;
+      this.launchKind = "agent";
       this.confirmation = undefined;
       this.notice = "";
       // Uncontrolled form drafts must never migrate into a different conversation.
@@ -436,6 +448,8 @@ export class SubagentsPanel extends LitElement {
       !this.hasRun(params.id)
     )
       return;
+    if (method === "manage" && params.action !== "schedule.list" &&
+      (params.id !== this.selectedSchedule || !selectableSchedule(this.controller.state.scheduleRecords, this.selectedSchedule))) return;
     const needsConfirmation =
       ["spawn", "stop", "interrupt", "resume"].includes(method) ||
       (method === "manage" &&
@@ -481,7 +495,8 @@ export class SubagentsPanel extends LitElement {
       pending &&
       pending.scope === this.formScope &&
       this.controller.available &&
-      (!["stop", "interrupt", "resume", "steer"].includes(pending.method) || this.hasRun(pending.params.id))
+      (!["stop", "interrupt", "resume", "steer"].includes(pending.method) || this.hasRun(pending.params.id)) &&
+      (pending.method !== "manage" || (pending.params.id === this.selectedSchedule && selectableSchedule(this.controller.state.scheduleRecords, this.selectedSchedule)))
     )
       void this.controller.perform(pending.method, pending.params, true);
     this.restoreConfirmationFocus(pending);
@@ -492,24 +507,20 @@ export class SubagentsPanel extends LitElement {
   }
   private launch = (event: Event): void => {
     const data = this.form(event);
-    const kind = String(data.get("kind"));
     try {
-      const params: JsonObject = {
-        [kind]: String(data.get("source")).trim(),
-        async: true,
-      };
-      if (kind === "agent" && data.get("task"))
-        params.task = String(data.get("task"));
-      if (kind !== "agent" && String(data.get("args")).trim())
-        params.args = JSON.parse(String(data.get("args"))) as JsonObject;
-      if (data.get("model")) params.model = String(data.get("model"));
-      if (data.get("label")) params.label = String(data.get("label"));
-      params.context = String(data.get("context"));
+      const params = launchParams(data);
+      this.notice = "";
       this.operate("spawn", params);
     } catch (error) {
       this.notice = this.content.t("invalidLaunch", { error: String(error) });
       this.requestUpdate();
     }
+  };
+  private toggleLaunch = (): void => {
+    this.sync();
+    this.launchOpen = !this.launchOpen;
+    this.requestUpdate();
+    void this.updateComplete.then(() => this.renderRoot.querySelector<HTMLElement>(this.launchOpen ? "#launch-heading" : "#new-run")?.focus());
   };
   private helper = async (kind: "supervisor" | "admin"): Promise<void> => {
     const initiatingScope = this.formScope;
@@ -555,6 +566,7 @@ export class SubagentsPanel extends LitElement {
         >
           ${t(state.refreshing ? "refreshing" : "refresh")}
         </button>
+        <button id="new-run" class="ui-button" aria-expanded=${this.launchOpen} aria-controls="launch-form" @click=${this.toggleLaunch}>${t("newRun")}</button>
       </header>
       <p class="scope">
         ${state.scope
@@ -741,36 +753,28 @@ ${JSON.stringify(state.transcript.details, null, 2)}</pre
         ` : html`<p class="warning">${t("readOnlyNode")}</p>`}
       </section>`) : html`<section class="inspector"><p>${t("chooseRun")}</p></section>`}
       </div>
-      <section>
-        <h2>${t("launch")}</h2>
-        <details>
-          <summary>${t("newWork")}</summary>
+      <section id="launch-form" ?hidden=${!this.launchOpen} aria-labelledby="launch-heading">
+        <h2 id="launch-heading" tabindex="-1">${t("launch")}</h2>
+        <button class="ui-button" @click=${this.toggleLaunch}>${t("closeLaunch")}</button>
           <form @submit=${this.launch}>
             <label
               >${t("launchType")}
-              <select class="ui-select" name="kind">
+              <select class="ui-select" name="kind" .value=${this.launchKind} @change=${(event: Event) => {
+                this.launchKind = (event.target as HTMLSelectElement).value;
+                this.confirmation = undefined;
+                this.requestUpdate();
+              }}>
                 <option value="agent">${t("configuredAgent")}</option>
                 <option value="script">${t("script")}</option>
                 <option value="workflow">${t("workflow")}</option>
               </select></label
             >
-            <label
-              >${t("source")}
-              <textarea
-                name="source"
-                rows="2"
-                required
-                maxlength="32768"
-              ></textarea>
+            ${keyed(this.launchKind, html`<label>
+              ${t(this.launchKind === "agent" ? "configuredAgent" : this.launchKind === "script" ? "script" : "workflow")}
+              <textarea name="source" rows="2" required maxlength="32768"></textarea>
             </label>
-            <label
-              >${t("task")}
-              <textarea name="task" rows="3" maxlength="32768"></textarea>
-            </label>
-            <label
-              >${t("args")}
-              <textarea name="args" rows="2" placeholder="{}"></textarea>
-            </label>
+            ${this.launchKind === "agent" ? html`<label>${t("task")}<textarea name="task" rows="3" maxlength="32768"></textarea></label>`
+              : html`<label>${t("args")}<textarea name="args" rows="2" maxlength="32768" placeholder="{}"></textarea></label>`}`)}
             <div class="actions">
               <label
                 >${t("context")}
@@ -786,13 +790,12 @@ ${JSON.stringify(state.transcript.details, null, 2)}</pre
               /></label>
             </div>
             <p class="meta">
-              ${t("launchNote")}
+              ${t("launchNote")} ${t("launchCatalogNote")}
             </p>
             <button class="ui-button" ?disabled=${!this.supports("spawn")}>${t("reviewLaunch")}</button>
           </form>
-        </details>
       </section>
-      <section>
+      <section id="schedules-section">
         <h2>${t("schedules")}</h2>
         <button class="ui-button"
           ?disabled=${!this.supports("manage", "schedule.list")}
@@ -800,51 +803,38 @@ ${JSON.stringify(state.transcript.details, null, 2)}</pre
         >
           ${t("listSchedules")}
         </button>
-        <form
-          @submit=${(event: Event) => {
-            const data = this.form(event);
-            this.operate("manage", {
-              action: String(data.get("action")),
-              id: String(data.get("id")),
-            });
-          }}
-        >
-          <label
-            >${t("scheduleId")} <input name="id" required maxlength="64"
-          /></label>
-          <label
-            >${t("scheduleAction")}
-            <select class="ui-select" name="action">
-              ${MANAGEMENT_ACTIONS.filter((a) => a !== "schedule.list").map(
-                (action) =>
-                  html`<option
-                    value=${action}
-                    ?disabled=${!this.controller.supports("manage", action)}
-                  >
-                    ${action.slice(9)}
-                  </option>`,
-              )}
-            </select></label
-          >
-          <button class="ui-button" ?disabled=${!this.supports("manage")}>
-            ${t("scheduleExecute")}
-          </button>
-        </form>
-        ${state.schedules
-          ? html`<p class="meta">
-                ${t("scheduleCached")}
-              </p>
-              <pre tabindex="0" aria-label=${t("scheduleOutput")}>
-${state.schedules.text}</pre
-              >
-              ${state.schedules.details?.schedules
-                ? html`<pre>
-${JSON.stringify(state.schedules.details.schedules, null, 2)}</pre
-                  >`
-                : nothing}`
-          : html`<p>
-              ${t("schedulesNotLoaded")}
-            </p>`}
+        <p class="meta">${t("scheduleListNote")}</p>
+        ${state.scheduleRecordsAt === undefined ? nothing : html`<p class="meta">${t("scheduleListAt", { date: this.content.date(state.scheduleRecordsAt) })}</p>`}
+        ${state.scheduleRecords ? html`<ul class="schedule-list">${state.scheduleRecords.map((record) => html`<li>
+          <button class="ui-button" aria-pressed=${record.id === this.selectedSchedule}
+            ?disabled=${!selectableSchedule(state.scheduleRecords, String(record.id))}
+            @click=${() => {
+              const scope = this.formScope;
+              this.sync();
+              if (scope !== this.formScope || !selectableSchedule(this.controller.state.scheduleRecords, String(record.id))) return;
+              this.selectedSchedule = String(record.id);
+              this.confirmation = undefined;
+              this.requestUpdate();
+              void this.updateComplete.then(() => this.renderRoot.querySelector<HTMLElement>("#schedule-heading")?.focus());
+            }}>${String(record.name)} · ${String(record.id)}</button>
+          <span class="pill">${t(record.paused ? "schedulePausedState" : "scheduleEnabledState")}</span>
+        </li>`)}</ul>${state.scheduleRecords.length ? nothing : html`<p>${t("scheduleEmpty")}</p>`}` : html`<p>${t("schedulesNotLoaded")}</p>`}
+        ${this.selectedSchedule ? html`<article class="schedule-detail">
+          <h3 id="schedule-heading" tabindex="-1">${t("scheduleSelected")} · ${this.selectedSchedule}</h3>
+          ${scheduleFacts(state.scheduleRecords!.find((record) => record.id === this.selectedSchedule)!, this.content)}
+          <div class="actions">${MANAGEMENT_ACTIONS.filter((action) => action !== "schedule.list").map((action) => html`<button
+            class="ui-button" ?disabled=${!this.supports("manage", action)}
+            @click=${() => this.operate("manage", { action, id: this.selectedSchedule })}
+          >${t(action === "schedule.show" ? "scheduleShow" : action === "schedule.history" ? "scheduleHistory" : action === "schedule.pause" ? "schedulePause" : action === "schedule.resume" ? "scheduleResume" : action === "schedule.run" ? "scheduleRun" : "scheduleDelete")}</button>`)}</div>
+          ${state.scheduleTarget === this.selectedSchedule && state.scheduleAction === "schedule.show"
+            ? (state.schedules?.details?.schedules?.records ?? []).filter((record) => record.id === this.selectedSchedule).map((record) => html`<h4>${t("scheduleShowResult")}</h4>${scheduleFacts(record, this.content)}`) : nothing}
+          ${state.scheduleTarget === this.selectedSchedule && state.scheduleAction === "schedule.history"
+            ? scheduleHistory(state.schedules?.details?.schedules?.runs, this.selectedSchedule, this.content) : nothing}
+        </article>` : html`<p>${t("scheduleChoose")}</p>`}
+        ${state.schedules ? html`<p class="meta">${t("scheduleCached")} ${state.scheduleAction} · ${state.scheduleTarget} · ${state.schedulesAt === undefined ? "" : this.content.date(state.schedulesAt)}</p>
+          <details><summary>${t("scheduleOutput")}</summary><pre tabindex="0">${state.schedules.text}</pre>
+            ${state.schedules.details?.schedules ? html`<pre>${JSON.stringify(state.schedules.details.schedules, null, 2)}</pre>` : nothing}
+          </details>` : nothing}
       </section>
       <section>
         <h2>${t("cost")} <span class="pill">${t("onDemand")}</span></h2>
@@ -943,6 +933,13 @@ ${JSON.stringify(state.schedules.details.schedules, null, 2)}</pre
             <p>
               ${t("confirmNote", { session: this.controller.state.scope?.sessionId ?? "" })}
             </p>
+            ${this.confirmation.method === "spawn" ? html`<dl class="facts">
+              <div><dt>${t("launchType")}</dt><dd>${this.confirmation.params.agent !== undefined ? t("configuredAgent") : this.confirmation.params.script !== undefined ? t("script") : t("workflow")}</dd></div>
+              <div><dt>${t("source")}</dt><dd>${String(this.confirmation.params.agent ?? this.confirmation.params.script ?? this.confirmation.params.workflow)}</dd></div>
+              <div><dt>${t("context")}</dt><dd>${String(this.confirmation.params.context)}</dd></div>
+              <div><dt>${t("model")}</dt><dd>${this.confirmation.params.model ?? t("inheritModel")}</dd></div>
+              ${this.confirmation.params.task ? html`<div><dt>${t("task")}</dt><dd class="reported-goal">${String(this.confirmation.params.task)}</dd></div>` : nothing}
+            </dl>` : this.confirmation.method === "manage" ? html`<p>${t("scheduleAction")}: ${String(this.confirmation.params.action)} · ${t("scheduleId")}: <code>${String(this.confirmation.params.id)}</code></p>` : nothing}
             <pre>${JSON.stringify(this.confirmation.params, null, 2)}</pre>
             <button
               class="ui-button danger"
@@ -1086,6 +1083,15 @@ ${JSON.stringify(state.schedules.details.schedules, null, 2)}</pre
       margin: 10px 0;
       font-size: 12px;
     }
+    .schedule-detail .facts {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
+    }
+    .schedule-list { padding-inline-start: 20px; }
+    .schedule-list li { margin-block: 8px; overflow-wrap: anywhere; }
+    .schedule-list button { white-space: normal; overflow-wrap: anywhere; max-inline-size: 100%; text-align: start; }
+    .schedule-history { padding-inline-start: 20px; }
+    .schedule-history li { border-inline-start: 2px solid var(--pi-border, #8885); padding-inline-start: 12px; margin-block: 12px; }
     .facts > div { min-inline-size: 0; }
     .facts dt { opacity: 0.75; }
     .facts dd { margin: 0; overflow-wrap: anywhere; }
@@ -1250,6 +1256,7 @@ ${JSON.stringify(state.schedules.details.schedules, null, 2)}</pre
       padding: 18px;
       border: 2px solid var(--pi-warning, #bf8c36);
       background: var(--pi-surface, Canvas);
+      color: var(--pi-text, CanvasText);
       box-shadow: 0 4px 24px #0003;
       border-radius: 10px;
     }

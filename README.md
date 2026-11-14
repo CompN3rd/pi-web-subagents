@@ -96,10 +96,10 @@ see the validation boundaries below.
 | Fleet/live async status | Workspace panel; readable progress, snapshot-relative timing/activity, host monitors and unlinked token/window metrics; omissions and stale state remain visible |
 | Run output/transcripts | Bounded selected-run text reads and opt-in follow (80 default / 500 max lines); scroll-away protection, Jump to latest, cached-read time and errors. Follow stops on hide, close, target/scope change or failure; no structured child stream |
 | Workflow trace | Readable supplied targeted trace phases, operations, state, duration, reuse and read-only run references; not a full plan or progress percentage |
-| Single-agent/workflow launch | Existing async RPC; upstream admission and capability limits remain authoritative |
+| Single-agent/workflow launch | Focused New run form with mode-specific fields and validated readable confirmation; blank model sends no override. Existing async RPC; upstream admission and capability limits remain authoritative |
 | Steer/interrupt/stop/resume | Explicit controls using authoritative run identities |
 | Costs | On-demand parent/child/total table with input/output, caches, turns and USD cost; timestamp and incomplete-accounting warnings |
-| Existing schedules | RPC list/show/history/pause/resume/run/delete only |
+| Existing schedules | Selectable exact-ID cached records, readable details/history, and original text; on-demand list/show/history plus confirmed pause/resume/run/delete. No create/update or Pi Web Automations integration |
 | Supervisor questions/replies | Ordinary parent conversation/tool workflow; **no direct reply-card API** |
 | Agent/model/config editing | Existing upstream commands/dialogs; not a new web configuration editor |
 | Rich inline tool/message rendering | Available in pinned host API v5; adapter integration is pending. This does not expose structured child transcripts or hidden custom entries |

@@ -38,6 +38,47 @@ async function setup(
   await tick();
   return { controller, clock, calls, context, signals };
 }
+test("C8: schedule list provenance survives detail/history reads and clears on exact scope changes", async () => {
+  let failList = false;
+  let omitList = false;
+  const h = await setup(async (input) => {
+    if (input.method !== "manage") return reply(input);
+    if (failList && input.params?.action === "schedule.list") throw new Error("list unavailable");
+    if (omitList && input.params?.action === "schedule.list") return reply(input, { text: "Text-only list" });
+    return reply(input, { text: input.params?.action, details: { schedules: input.params?.action === "schedule.history"
+      ? { runs: [{ id: "history-1", scheduleId: "s-1", state: "failed" }] }
+      : { records: [{ id: "s-1", name: input.params?.action, paused: false }] } } });
+  });
+  await h.controller.perform("manage", { action: "schedule.list" });
+  const records = h.controller.state.scheduleRecords;
+  const listAt = h.controller.state.scheduleRecordsAt;
+  assert.equal(records?.[0]?.name, "schedule.list");
+  for (const action of ["schedule.show", "schedule.history", "schedule.pause"]) {
+    await h.clock.advance(100);
+    await h.controller.perform("manage", { action, id: "s-1" }, true);
+    assert.equal(h.controller.state.scheduleRecords, records);
+    assert.equal(h.controller.state.scheduleRecordsAt, listAt);
+    assert.equal(h.controller.state.scheduleAction, action);
+    assert.equal(h.controller.state.scheduleTarget, "s-1");
+    assert.ok(h.controller.state.schedulesAt! > listAt!);
+  }
+  failList = true;
+  await h.controller.perform("manage", { action: "schedule.list" });
+  assert.equal(h.controller.state.scheduleRecords, records);
+  assert.equal(h.controller.state.scheduleAction, "schedule.pause", "failed read does not relabel cached response");
+  failList = false;
+  omitList = true;
+  await h.controller.perform("manage", { action: "schedule.list" });
+  assert.equal(h.controller.state.scheduleRecords, undefined, "new text-only list cannot retain old selectable authority");
+  assert.equal(h.controller.state.schedules?.text, "Text-only list");
+  h.context.state!.selectedSession!.id = "other-session";
+  h.controller.update(h.context);
+  assert.equal(h.controller.state.scheduleRecords, undefined);
+  assert.equal(h.controller.state.schedulesAt, undefined);
+  assert.equal(h.controller.state.scheduleTarget, "");
+  h.controller.unmount();
+});
+
 test("criterion 3: duplicate root IDs reject all targeted reads and controls before transport", async () => {
   const h = await setup();
   const root = h.controller.state.status!.asyncSnapshot!.runs[0]!;
