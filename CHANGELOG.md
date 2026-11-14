@@ -2,6 +2,17 @@
 
 ## Unreleased — 0.88.1 candidate
 
+- Redesign the panel as a reported-window fleet/inspector with safe unique-root
+  controls, readable progress/timing/monitor facts, selected-only text follow,
+  complete-column usage, selectable schedule history and focused launch review.
+- Add bounded v5 `subagent` tool cards: tasks/results, progress/output/usage,
+  preflight/trace, supplied workflow graph/child inventory/receipt lanes and host
+  monitors, acceptance/review findings, watchdog evidence, and runner profiles
+  explicitly labelled unmeasured. Historical IDs/paths never become controls.
+  Session-row/global counters are not shipped without a suitable fleet data feed.
+  Adapter-local implementation awaits fresh-context review; full API parity and
+  live-host/Node-24 candidate acceptance are not claimed.
+
 - Add public v5 display-only cards for all 14 released displayed custom-message
   types: grouped outcomes, supervisor decision/interview/progress/reminders,
   steering/control attention, workflow failures and watchdog evidence/actions.
@@ -12,7 +23,7 @@
 - Prepare adapter/optional engine mapping 0.88.1 using verified exact released
   tarball bytes, without installing or bundling the engine. Host remains
   1.202611.1 (API v5). The bundled RPC bridge is unchanged from 0.84.0; additive
-  progress fields are already supported by the in-progress parity redesign.
+  progress fields are supported by the adapter-local parity redesign.
 - Record all five intervening engine releases and public contract boundaries in
   `docs/upstream-0.88.1.md`, including old-run resume incompatibility and the
   absence of per-child model-facing permission hooks on RPC workflow launches.

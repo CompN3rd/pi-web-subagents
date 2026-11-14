@@ -56,6 +56,15 @@ test("C1/A12: supported single, parallel, chain, workflow and management payload
       assert.match(rendered.text, /Host check.*host.*acceptance/);
       assert.match(rendered.text, /Checks blocked/);
       assert.match(rendered.text, /Historical warning/);
+      assert.match(rendered.text, /Reported workflow graph.*Reported fanout.*Graph worker.*Graph gate/s);
+      assert.match(rendered.text, /Host monitor \(not a child agent\).*new-head.*old-head/s);
+      assert.match(rendered.text, /Reported workflow receipt \/ lanes.*receipt-ref.*Review first.*budget_exhausted/s);
+      assert.match(rendered.text, /Reported review.*blockers.*Review found regression/s);
+      assert.match(rendered.text, /Reported child watchdog.*stale.*Missing regression test/s);
+      assert.match(rendered.text, /Addressed means a later child turn.*not verified resolution/s);
+      assert.match(rendered.text, /Adapter profile, not measured security/);
+      assert.match(rendered.text, /wrapper.*codex-exec/s);
+      assert.doesNotMatch(rendered.text, /100%|complete plan achieved/);
     }
     if (mode === "chain") assert.match(rendered.text, /worker → reviewer/);
   }
@@ -85,7 +94,7 @@ test("C1: malformed recognized fields, bounded strings/arrays and cumulative bud
     { ...basic, preflightWarnings: Array(9).fill("x".repeat(16_384)) },
   ]) assert.equal(parseToolDetails(value), undefined, JSON.stringify(value)?.slice(0, 100));
   assert.ok(parseToolDetails({ ...basic, runId: "x".repeat(16_384) }));
-  const unvisited = { ...basic, workflowGraph: { get huge() { throw new Error("Do not traverse unknown data"); } } };
+  const unvisited = { ...basic, outputs: { get huge() { throw new Error("Do not traverse unknown data"); } } };
   assert.ok(parseToolDetails(unvisited));
   assert.equal(parseToolDetails({ ...basic, get runId() { throw new Error("Bad input"); } }), undefined);
   assert.equal(parseToolArgs("x".repeat(32_769)), undefined);

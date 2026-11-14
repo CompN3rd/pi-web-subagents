@@ -156,6 +156,25 @@ try {
       .evaluate((element) => element.getRootNode().activeElement === element),
     true,
   );
+  // B10: simulated host-owned native dialog while the adapter confirmation is open.
+  // This checks stacking/focus ownership, not the real host extension-dialog implementation.
+  await page.evaluate(() => {
+    const dialog = document.createElement("dialog");
+    dialog.id = "fixture-host-dialog";
+    const button = document.createElement("button");
+    button.textContent = "Fixture host choice";
+    button.addEventListener("click", () => dialog.close("chosen"));
+    dialog.append(button);
+    document.body.append(dialog);
+    dialog.showModal();
+    button.focus();
+  });
+  assert.equal(await page.getByRole("button", { name: "Fixture host choice" }).evaluate((button) => document.activeElement === button), true);
+  await page.getByRole("button", { name: "Fixture host choice" }).click();
+  assert.equal(await page.locator("#fixture-host-dialog").evaluate((dialog) => dialog.returnValue), "chosen");
+  assert.equal(await page.locator(".confirmation").count(), 1, "host choice does not confirm adapter mutation");
+  assert.equal(await page.evaluate(() => window.fixture.calls.filter((call) => call.method === "stop").length), 0);
+  await page.evaluate(() => document.getElementById("fixture-host-dialog").remove());
   await page.getByRole("button", { name: "Cancel", exact: true }).click();
   assert.equal(
     await stop.evaluate(
@@ -635,6 +654,21 @@ try {
   assert.match(await card.locator(".card").innerText(), /running/);
   assert.match(await card.locator(".card").innerText(), /Host check/);
   assert.match(await card.locator(".card").innerText(), /Checks blocked/);
+  assert.match(await card.locator(".card").innerText(), /Review found regression/);
+  assert.match(await card.locator(".card").innerText(), /Missing regression test/);
+  const workflowDisclosures = ["Reported workflow graph", "Reported workflow receipt / lanes", "Reported workflow child inventory", "Reported runner / adapter profile"];
+  for (const label of workflowDisclosures) {
+    const summary = card.locator("summary").filter({ hasText: label }).first();
+    await summary.focus();
+    await page.keyboard.press("Enter");
+    assert.equal(await summary.evaluate((element) => element.parentElement.open), true);
+  }
+  assert.match(await card.locator(".card").innerText(), /Graph worker/);
+  assert.match(await card.locator(".card").innerText(), /Host monitor \(not a child agent\): Graph gate/);
+  assert.match(await card.locator(".card").innerText(), /Gate needs evidence/);
+  assert.match(await card.locator(".card").innerText(), /not-resumable/);
+  assert.match(await card.locator(".card").innerText(), /inventory-worker/);
+  assert.match(await card.locator(".card").innerText(), /Adapter profile, not measured security/);
   assert.equal(await card.locator("button, a, img, script").count(), 0);
   assert.equal(await page.evaluate(() => window.evil), undefined);
   assert.equal(await page.evaluate(() => window.fixture.styles.roots.size), 2);
@@ -644,6 +678,9 @@ try {
   assert.equal(await taskDisclosure.evaluate((element) => element.parentElement.open), true);
   await page.evaluate(() => window.fixture.renderTool("workflow"));
   assert.equal(await taskDisclosure.evaluate((element) => element.parentElement.open), true, "repeat render retains disclosure");
+  for (const label of workflowDisclosures) {
+    assert.equal(await card.locator("summary").filter({ hasText: label }).first().evaluate((element) => element.parentElement.open), true);
+  }
   await page.setViewportSize({ width: 375, height: 900 });
   await page.evaluate(() => {
     window.fixture.localization.change("ar", "de-DE", { toolCard: "Carte historique" }, "rtl");
@@ -783,7 +820,8 @@ try {
       "live translated labels, RTL and theme tokens preserve draft/selection without execution",
       "stylesheet/localization registrations release on unmount",
       "escaped output",
-      "C1/A12: built inline single/parallel/chain/workflow cards, literal hostile strings, partial preflight, acceptance and host trace; call success distinct from run state; no RPC from rendering",
+      "C1/A12/C4/C9: built inline cards, literal hostile strings, preflight, acceptance/review, watchdog, runner profile provenance, graph/host monitors, child inventory and receipt lanes; call success distinct from run state; no RPC from rendering",
+      "B10: simulated host-native dialog remains focusable/clickable over adapter confirmation; host choice neither confirms nor discards pending mutation; NOT real extension-dialog acceptance",
       "C1: fake v5 default-view/unknown/malformed fallback and abort/unmount cleanup; keyboard disclosure retained on repeat rendering; mobile RTL/localization/theme containment",
       "C2–C4: all 14 exact displayed custom-message types; grouped mixed outcomes, decision/interview/progress distinctions, reminders, watchdog evidence and historical held state; no direct controls or RPC",
       "C2–C4: legacy text, unknown/malformed/hidden-entry-type/default fallback; keyboard disclosure/repeat update, escaping, narrow RTL/theme containment, unmount/style/localization cleanup",

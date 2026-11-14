@@ -1,6 +1,7 @@
 import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import type { TranscriptRendererContribution, TranscriptToolRendererInput } from "@jmfederico/pi-web/plugin-api";
 import { englishContent, type PanelContent } from "./localization.js";
+import { reviewView, watchdogView, runnerView, workflowView } from "./transcript-workflow.js";
 import { facts, durationBetween, workflowTrace } from "./presentation.js";
 import { parseToolArgs, parseToolDetails, parseTextContent, type ToolProgress, type ToolResult, type ToolUsage, type ToolArgs } from "./transcript-schema.js";
 
@@ -61,6 +62,7 @@ function progress(value: ToolProgress, content: PanelContent): TemplateResult {
   ])}
   ${value.progressText === undefined ? nothing : html`<p><strong>${t("progress")}</strong>: ${value.progressText}</p>`}
   ${value.error === undefined ? nothing : html`<p class="error">${value.error}</p>`}
+  ${watchdogView(value.watchdog, content)}
   ${disclosure(t("childTask"), value.task)}
   ${disclosure(t("recentOutput"), value.recentOutput?.join("\n"))}
   ${value.recentTools?.length ? html`<details><summary>${t("recentTools")}</summary><ul>${value.recentTools.map((tool) => html`<li><strong>${tool.tool}</strong><pre>${tool.args}</pre></li>`)}</ul></details>` : nothing}`;
@@ -92,6 +94,8 @@ function child(value: ToolResult, content: PanelContent): TemplateResult {
     [t("reportedState"), value.acceptance.status], [t("evidenceStatus"), value.acceptance.evidenceStatus],
     [t("parentDecision"), value.acceptance.parentDecision?.status], [t("reason"), value.acceptance.parentDecision?.reason],
   ])}<ul>${value.acceptance.runtimeChecks?.map((check) => html`<li>${check.id}: ${check.status} — ${check.message}</li>`)}</ul></section>` : nothing}
+  ${reviewView(value.review ?? value.acceptance?.reviewResult, content)}
+  ${watchdogView(value.watchdog, content)}${runnerView(value.runner, content)}
   </li>`;
 }
 
@@ -142,6 +146,7 @@ export function toolBody(input: TranscriptToolRendererInput, content = englishCo
       ])}<ul>${lane.claims?.map((claim) => html`<li>${claim}</li>`)}</ul></li>`)}</ol></section>` : nothing}
       ${(details?.preflightWarnings || details?.workflow?.preflightWarnings) ? html`<section><h4>${t("preflightWarnings")}</h4><ul>${[...(details.preflightWarnings ?? []), ...(details.workflow?.preflightWarnings ?? [])].map((warning) => html`<li>${warning}</li>`)}</ul></section>` : nothing}
       ${workflowTrace(details?.workflow as Parameters<typeof workflowTrace>[0], content)}
+      ${workflowView(details, content)}
       ${disclosure(t("toolOutput"), output?.text)}
       ${output?.truncated ? html`<p class="meta">${t("toolOutputCapped")}</p>` : nothing}
     </section>`;

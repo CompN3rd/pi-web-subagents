@@ -9,10 +9,12 @@ the execution engine, or replace Pi Web's tracked subsessions.
 This checkout prepares adapter **0.88.1** with an exact optional peer mapping to
 separately installed **`pi-subagents@0.88.1`**, targeting PI WEB 1.202611.1 and
 plugin API v5. The released engine tarball has been SHA-512 verified; it has not
-been installed or executed by this work. The adapter-local parity redesign is
-still in progress: bounded inline tool cards and the 14 released displayed-message
-card types are implemented with fixture evidence. This is not a publication
-or full-parity claim. See the [exact engine audit and upgrade cautions](docs/upstream-0.88.1.md).
+been installed or executed by this work. The adapter-local redesign is implemented
+and awaiting fresh-context review: fleet/inspector, usage, schedules, launch and
+bounded inline tool/custom-message cards have fixture evidence. These are
+**public-API parity improvements, with enumerated full-parity blockers**, not a
+publication or full-parity claim. See the [acceptance evidence and limits](docs/subagents-parity-leg8-validation.md)
+and [exact engine audit and upgrade cautions](docs/upstream-0.88.1.md).
 
 The earlier 0.84.1 release targeted engine 0.84.0 and adopted shared host controls,
 localizable labels and regional formatting, and observation fixes. Its
@@ -110,14 +112,14 @@ see the validation boundaries below.
 | Existing schedules | Selectable exact-ID cached records, readable details/history, and original text; on-demand list/show/history plus confirmed pause/resume/run/delete. No create/update or Pi Web Automations integration |
 | Supervisor questions/replies | Historical decision/interview/progress and reminder cards; panel helper prepares a parent message. Actual replies stay in the ordinary parent tool workflow; **no direct reply-card or live inbox API** |
 | Agent/model/config editing | Existing upstream commands/dialogs; not a new web configuration editor |
-| Rich inline tool/message rendering | V5 `subagent` tool cards render bounded reported tasks/output, progress, model/context, usage, grouped results, workflow traces/preflight and acceptance facts. Unknown/malformed payloads keep the generic host view; default-view controls remain host-owned. All 14 released displayed custom-message types have historical cards, including grouped outcomes, supervisor requests/reminders, control/steering notices and readable watchdog evidence/recommendations. Legacy text remains escaped, not parsed into facts. No structured child-history or hidden-entry access |
+| Rich inline tool/message rendering | V5 `subagent` tool cards render bounded reported tasks/output, progress, model/context, usage, grouped results, workflow traces/preflight, bounded graphs and child inventories, receipt lanes/host monitors, acceptance/review findings, child watchdog evidence and runner profiles explicitly labelled unmeasured. Unknown/malformed payloads keep the generic host view; default-view controls remain host-owned. All 14 released displayed custom-message types have historical cards, including grouped outcomes, supervisor requests/reminders, control/steering notices and readable watchdog evidence/recommendations. Legacy text remains escaped, not parsed into facts. No structured child-history or hidden-entry access |
 | TUI widgets, overlays and keybindings | Not ported literally |
 | Child-scoped controls | Display only; whole-run controls avoid ambiguous child identities |
 | Activity refresh and receipts | Bounded event-driven observation with 5s reconciliation; older engines poll at 2s active/10s idle; up to 20 in-memory receipts (not persistent) |
 | Host background-run counter | No equivalent public reporting hook established |
 | Pi Web tracked subsessions | Separate built-in system; not adopted as pi-subagents runs |
 
-The in-progress [parity inventory](docs/subagents-parity-inventory.md) tracks the
+The [parity inventory](docs/subagents-parity-inventory.md) tracks the
 adapter-local redesign and remaining public API dependencies. Snapshot durations
 and progress ages are fixed to the snapshot generation time, not browser render
 time; fleet elapsed values use the last successful observation. Progress fields
