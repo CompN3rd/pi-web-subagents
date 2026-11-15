@@ -6,16 +6,21 @@ the execution engine, or replace Pi Web's tracked subsessions.
 
 ## Release status
 
-This checkout prepares adapter **0.88.1** with an exact optional peer mapping to
-separately installed **`pi-subagents@0.88.1`**, targeting PI WEB 1.202611.1 and
-plugin API v5. The released engine tarball has been SHA-512 verified; it has not
-been installed or executed by this work. The adapter-local redesign is implemented
-and independently approved for its agreed scope: fleet/inspector, usage,
-schedules, launch and bounded inline tool/custom-message cards have fixture evidence. These are
-**public-API parity improvements, with enumerated full-parity blockers**, not a
-publication or full-parity claim. See the [final review and validation limits](docs/subagents-parity-review-2.md),
-[acceptance evidence](docs/subagents-parity-leg8-validation.md) and
-[exact engine audit and upgrade cautions](docs/upstream-0.88.1.md).
+Adapter **0.88.1** maps exactly to separately installed
+**`pi-subagents@0.88.1`**, targeting PI WEB 1.202611.1 and plugin API v5.
+Validation includes **195 tests on Node 24.20.0**, Chromium regression coverage,
+and live control testing on PI WEB **1.202611.2** with Pi **1.5.2** and the
+unmodified 0.88.1 engine. Independent reviews found no concrete adapter blockers.
+These are **public-API parity improvements, not full upstream feature parity**.
+See [release acceptance and known limitations](docs/release-0.88.1.md), the
+[original scoped review](docs/subagents-parity-review-2.md), and
+[engine audit and upgrade cautions](docs/upstream-0.88.1.md).
+
+**Known upstream limitation:** after resuming a paused run into a new run ID,
+stopping the original can leave the global roster reporting paused while
+exact-run output reports stopped. This was reproduced on engine 0.88.1 and
+accepted as an upstream limitation for this adapter release. The adapter keeps
+those observations separate; it does not patch the engine or invent convergence.
 
 The earlier 0.84.1 release targeted engine 0.84.0 and adopted shared host controls,
 localizable labels and regional formatting, and observation fixes. Its
@@ -78,7 +83,7 @@ build or tests.
 | Execution engine (separate installation) | Exact `pi-subagents` version/integrity in [`upstream-lock.json`](upstream-lock.json) |
 | Web host | `@jmfederico/pi-web@1.202611.1` |
 | Host plugin APIs | Browser 5 / server 5; stylesheet integration v1 |
-| Node | 24 or newer; historical 0.84.1 validation used 24.20.0; current Relay checks use 22.22.2, not Node-24 acceptance |
+| Node | 24 or newer; 0.88.1 validation used 24.20.0 on Windows |
 
 `upstream-lock.json` records the exact upstream npm tarball and SHA-512 integrity.
 It identifies release inputs, not a runtime attestation of the active daemon or
@@ -144,8 +149,13 @@ supervisor-help chip; it does not remove another plugin's content.
 - A transport timeout after dispatch means **outcome unknown**, not rejection.
   Do not automatically repeat a launch or other mutation.
 - For a lost launch reply, upstream supports correlation with
-  `rpc-spawn-<original-requestId>`. Missing or ambiguous evidence never proves
-  that no child started.
+  `rpc-spawn-<original-requestId>`. The matching unknown receipt can display
+  bounded, cached read-only correlation evidence without selecting a graph root.
+  It does not change the original unknown transport outcome or authorize another
+  launch. Missing or ambiguous evidence never proves that no child started.
+- Resume uses the saved contract and may create a **new run ID**. Inspect the
+  receipt and uniquely reported new root; do not repeat resume merely because
+  the original remains paused. See the known upstream limitation above.
 - Fleet display keys and arbitrary tree-node IDs are not child control targets.
 - Closing the panel, aborting a request, or disposing the plugin must not stop
   admitted agent work.
@@ -163,6 +173,12 @@ approval or a sandbox. See the [engine audit](docs/upstream-0.88.1.md).
 The optional peer declaration does not install or activate the engine for you. Build this adapter
 before installing a local package: Pi Web does not compile plugin TypeScript.
 There is deliberately no install or package lifecycle hook.
+
+For a **local directory** source, explicitly disable Pi resource discovery in
+its package settings entry: `{ "source": "/path/to/adapter", "extensions": [],
+"skills": [], "prompts": [], "themes": [] }`. Otherwise Pi may try to load the
+web-only directory as an extension. This filter is not required for the released
+npm source; do not add an engine or another subagent tool to this package.
 
 Once an accepted release exists, install its exact version through **Settings →
 Pi packages** on the intended machine. Confirm **Settings → Pi Web plugins**
@@ -202,7 +218,7 @@ To make it easy to reach:
 Pin preferences and responsive layout belong to the host. This plugin cannot
 force a permanently visible top-row button, override unpinning, guarantee
 adjacency at every screen size, or add an independent global top-bar surface:
-browser API v4 has no public contribution or pinning API for that. It does not
+browser API v5 has no public contribution or pinning API for that. It does not
 modify host DOM, private routes, or stored navigation preferences.
 
 If Subagents is absent from available navigation destinations entirely, check
@@ -212,7 +228,8 @@ before treating it as a pinning issue. Browser-source changes require rebuilding
 and reloading; package installation/update can also require the safe target-daemon
 restart described above. Unit tests and the browser fixture do not certify live
 host navigation, pin persistence, or responsive placement; those require separate
-isolated real-host acceptance. No live browser preferences were inspected here.
+isolated real-host acceptance. The 0.88.1 live acceptance covered navigation,
+resizing and mobile containment, not every pinning/preference combination.
 
 ### Runtime discovery is a separate fix
 
@@ -280,7 +297,8 @@ used local compiled adapter and patched engine paths, not a clean npm
 installation. Its parent faux-provider queue exhausted; exact-session RPC and
 two sequential child lifecycles were exercised, but a clean ordinary parent
 response was not certified. That run reported its owned test hosts and children
-exited and endpoints closed. No new standalone real-host result is claimed here.
+exited and endpoints closed. That older run is distinct from the standalone
+0.88.1 live acceptance summarized in [the release record](docs/release-0.88.1.md).
 
 Separate upstream context: the original `pi-subagents` root suites were **not
 green** in the earlier Windows validation:

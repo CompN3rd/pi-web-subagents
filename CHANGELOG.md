@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased — 0.88.1 candidate
+## 0.88.1 — 2026-11-15
 
 - Redesign the panel as a reported-window fleet/inspector with safe unique-root
   controls, readable progress/timing/monitor facts, selected-only text follow,
@@ -10,18 +10,19 @@
   monitors, acceptance/review findings, watchdog evidence, and runner profiles
   explicitly labelled unmeasured. Historical IDs/paths never become controls.
   Session-row/global counters are not shipped without a suitable fleet data feed.
-  Adapter-local implementation awaits fresh-context review; full API parity and
-  live-host/Node-24 candidate acceptance are not claimed.
+  Adapter-local implementation and corrective changes passed independent review;
+  full upstream feature parity is not claimed.
 
 - Add public v5 display-only cards for all 14 released displayed custom-message
   types: grouped outcomes, supervisor decision/interview/progress/reminders,
   steering/control attention, workflow failures and watchdog evidence/actions.
   Historical state is not a live inbox or reply authority; hidden entries remain
   hidden. Bounded validated projections, escaped original text and generic host
-  fallback have unit and isolated-browser evidence, not real-host acceptance.
+  fallback have unit and isolated-browser evidence. Live acceptance exercised
+  real tool/control notices, not every one of the 14 message types.
 
-- Prepare adapter/optional engine mapping 0.88.1 using verified exact released
-  tarball bytes, without installing or bundling the engine. Host remains
+- Map adapter/optional engine peer to 0.88.1 using verified exact released
+  tarball bytes; the engine remains separately installed, never bundled. Host target remains
   1.202611.1 (API v5). The bundled RPC bridge is unchanged from 0.84.0; additive
   progress fields are supported by the adapter-local parity redesign.
 - Record all five intervening engine releases and public contract boundaries in
@@ -33,6 +34,28 @@
   trusted publishing with provenance, rather than staging for npm 2FA approval.
   Preserve tag/main ancestry guards, Windows/Linux and browser checks, artifact
   identity/hash validation, and token-free publishing isolation.
+
+- Format noisy USD totals with bounded display precision while preserving tiny
+  nonzero costs through scientific notation; accounting values are unchanged.
+- Make static scope/capability guidance collapsible, keeping freshness and safety
+  state visible. Explain requested labels and workflow-root output limitations.
+- Display cached read-only correlation results beneath matching unknown spawn
+  receipts, even with no selected run. Preserve the unknown transport outcome,
+  escaping, scope isolation and no-retry boundary; returned IDs create no controls.
+- Explain resume's new-run-ID semantics and separate global snapshots from
+  exact-root output. **Known upstream 0.88.1 limitation:** stopping the original
+  after a successful resume can leave its global projection paused while
+  exact-root output reports stopped. Maintainer accepted this as an upstream
+  limitation for this adapter release; the engine is not patched.
+
+Validation: **195 tests**, typecheck, build, packed containment/registry integrity
+and Chromium regression passed on Windows **Node 24.20.0**. Real PI WEB
+**1.202611.2**, Pi **1.5.2**, unmodified engine **0.88.1** acceptance exercised
+all exposed control families across private alpha iterations, including real
+interrupt/resume/steer/stop effects, seven disposable schedule actions and
+controlled response-loss recovery. This is not every control combination,
+provider, language or host-lifecycle scenario. See
+[release acceptance and limitations](docs/release-0.88.1.md).
 
 ## 0.84.1
 
