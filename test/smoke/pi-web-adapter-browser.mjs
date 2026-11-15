@@ -481,17 +481,38 @@ try {
     assert.deepEqual((await mutationCalls()).filter((call) => call.method === "steer").at(-1).params, { id: "run-1", message: `explicit ${mode}`, mode });
     assert.equal(await page.locator(".confirmation").count(), 0);
   }
+  await page.evaluate(() => window.fixture.setRootState("paused"));
+  await refresh();
+  await page.getByText(/Paused is the engine-reported snapshot state/).waitFor();
   await page.locator('select[name="action"]').selectOption("resume");
   await page.locator('textarea[name="message"]').fill("resume saved contract only");
   const resumesBefore = (await mutationCalls()).filter((call) => call.method === "resume").length;
   await page.getByRole("button", { name: "Review / send message", exact: true }).click();
   assert.deepEqual(JSON.parse(await page.locator(".confirmation pre").textContent()), { id: "run-1", message: "resume saved contract only" });
+  assert.match(await page.locator(".confirmation").textContent(), /may create a new run ID[\s\S]*do not repeat resume/);
   await page.getByRole("button", { name: "Cancel", exact: true }).click();
   assert.equal((await mutationCalls()).filter((call) => call.method === "resume").length, resumesBefore);
   await page.getByRole("button", { name: "Review / send message", exact: true }).click();
   await page.getByRole("button", { name: "Confirm resume", exact: true }).click();
   await page.getByText("resume · accepted", { exact: true }).waitFor();
   assert.deepEqual((await mutationCalls()).filter((call) => call.method === "resume").at(-1).params, { id: "run-1", message: "resume saved contract only" });
+  await refresh();
+  await page.getByRole("button", { name: "Resumed root", exact: true }).waitFor();
+  assert.equal(await root.getAttribute("aria-pressed"), "true", "resume does not auto-select a returned identity");
+  assert.equal(await page.locator(".inspector .pill").first().textContent(), "paused");
+  await stop.click();
+  await page.getByRole("button", { name: "Confirm stop", exact: true }).click();
+  await page.getByText("stop · accepted", { exact: true }).first().waitFor();
+  await page.evaluate(() => window.fixture.setOutput("State: stopped — targeted read, not graph reconciliation"));
+  await page.getByRole("button", { name: "Load transcript", exact: true }).click();
+  await page.getByLabel("Targeted run output", { exact: true }).waitFor();
+  assert.match(await page.getByLabel("Targeted run output", { exact: true }).textContent(), /State: stopped/);
+  await refresh();
+  await refresh();
+  assert.equal(await page.locator(".inspector .pill").first().textContent(), "paused");
+  assert.equal(await connected.locator(":scope > article .pill").first().textContent(), "paused");
+  await page.getByText(/Separate cached exact-run read/).waitFor();
+  await page.locator(".inspector").screenshot({ path: join(artifacts, "paused-graph-stopped-output.png") });
   // Capability revocation between review and confirm fails closed at dispatch.
   await page.getByRole("button", { name: "Review / send message", exact: true }).click();
   await page.evaluate(() => { document.querySelector("body>div").firstElementChild.controller.state.ping.capabilities.resume = false; });
@@ -507,6 +528,8 @@ try {
   assert.equal((await mutationCalls()).filter((call) => call.method === "resume").length, resumesBefore + 2, "rejected resume never retries");
   await page.locator('select[name="action"]').selectOption("steer");
   await page.locator('select[name="mode"]').selectOption("auto");
+  await page.evaluate(() => window.fixture.setRootState("running"));
+  await refresh();
   // Workflow root can read its exact target, but cannot promise child transcripts.
   await page.getByText(/Workflow roots may have no transcript/).waitFor();
   const noTranscript = 'No transcript lines available. Use child index 0. <img src=x onerror="window.evil=true">';
@@ -542,9 +565,25 @@ try {
   const spawnCall = (await mutationCalls()).find((call) => call.method === "spawn");
   assert.equal("model" in spawnCall.params, false, "blank model inherits");
   assert.equal(spawnCall.params.label, "UI launch smoke");
+  await page.getByRole("button", { name: "Back to reported runs", exact: true }).click();
+  assert.equal(await page.locator("#control-heading").count(), 0);
   await page.getByRole("button", { name: "Inspect spawn correlation (read only)", exact: true }).click();
   await page.waitForFunction((id) => window.fixture.calls.some((call) => call.method === "status" && call.params?.id === `rpc-spawn-${id}`), spawnCall.requestId);
+  const correlation = page.locator(".correlation-evidence");
+  await correlation.waitFor();
+  assert.match(await correlation.textContent(), /State: complete; Run: returned-correlation-id[\s\S]*<img/);
+  assert.ok((await correlation.textContent()).includes(`rpc-spawn-${spawnCall.requestId}`));
+  assert.match(await correlation.textContent(), /Last successful bounded read:[\s\S]*original spawn outcome remains unknown/);
+  assert.equal(await correlation.locator("button, a, img").count(), 0);
+  assert.equal(await page.locator("#control-heading").count(), 0, "correlation evidence is visible without selecting any root");
+  assert.equal(await page.getByRole("button", { name: "returned-correlation-id", exact: true }).count(), 0);
+  await page.getByText("spawn · unknown", { exact: true }).waitFor();
+  await correlation.screenshot({ path: join(artifacts, "unknown-spawn-correlation-visible.png") });
+  await page.waitForTimeout(2200);
   assert.equal((await mutationCalls()).filter((call) => call.method === "spawn").length, 1, "correlation inspection is a read, not a retry");
+  assert.equal(await page.evaluate(() => document.querySelector("body>div").firstElementChild.controller.state.outputFollowing), false);
+  await root.click();
+  assert.equal(await correlation.count(), 0, "target changes clear the shared bounded correlation cache");
   await page.locator('select[name="kind"]').selectOption("workflow");
   assert.equal(await page.locator('textarea[name="task"]').count(), 0);
   assert.equal(await page.locator('textarea[name="source"]').inputValue(), "", "mode switch clears source");
@@ -1010,6 +1049,8 @@ try {
       "Alpha: requested-label caveat, exact trimmed confirmation payload, cancel sends nothing, accepted receipt does not override reported scout caption or root identity",
       "C5: accessible on-demand usage table including caches and turns; binary-noise total formatted consistently without mutating accounting; no accounting polling",
       "C6: all three launch modes, fresh/fork contexts, mode-only fields, cleared drafts, JSON validation, inherited/explicit model, readable confirmation, focus restoration, unknown spawn correlation read",
+      "Alpha3: correlation text/identity/time visibly rendered under unknown receipt with no root selected; escaped evidence has no controls; target change clears cache and no spawn retry",
+      "Alpha3: resume warning in confirmation; new reported root does not replace original selection; paused graph and separately stopped exact-root output remain distinct after refresh",
       "Expanded controls: interrupt cancellation; steer/auto/follow_up exact payloads; resume cancel/confirm, revoked capability and failed receipt without retry",
       "Expanded helpers: supervisor chip preserves draft; admin draft protection, own-chip removal, exact parent navigation and manual-send caveat; no RPC execution",
       "Expanded filters: all, active, attention and other/recent selectors are presentation-only",

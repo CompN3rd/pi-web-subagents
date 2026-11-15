@@ -133,6 +133,51 @@ test("workflow root output explains child transcript limits without replacing re
   assert.match(result.text, /Load transcript/);
 });
 
+test("spawn correlation evidence renders under only the matching unknown receipt without a selected root", () => {
+  const panel = new TestPanel();
+  panel.controller.update(panelContext());
+  const scope = JSON.stringify(["machine-1", "project-1", "workspace-1", "session-1"]);
+  for (const requestId of ["lost", "other"]) panel.controller.receipts.push({ scope, requestId, method: "spawn", state: "unknown", message: "Outcome unknown", at: 0 });
+  panel.controller.state.transcriptId = "rpc-spawn-lost";
+  panel.controller.state.transcriptAt = 0;
+  panel.controller.state.transcript = { text: `State: complete; Run: returned-id ${graphHostile}`, details: { asyncId: "returned-id" } };
+  const fixture = localizationFixture();
+  fixture.change("en", "de-DE", { correlationEvidence: "Korrelationsbeleg" });
+  panel.content = createContent(fixture.service);
+  const result = parts(panel.template());
+  assert.equal((result.markup.match(/class="correlation-evidence"/g) ?? []).length, 1);
+  assert.match(result.text, /Korrelationsbeleg/);
+  assert.ok(result.text.includes(panel.content.date(0)));
+  assert.ok(result.text.includes(panel.controller.state.transcript.text));
+  assert.match(result.text, /original spawn outcome remains unknown/);
+  assert.doesNotMatch(result.markup, /<img|<a /);
+  assert.doesNotMatch(result.text, /Load transcript|Whole-run target/);
+  assert.equal(panel.controller.receipts[0]!.state, "unknown");
+  panel.controller.selectOutput("run-1");
+  assert.doesNotMatch(parts(panel.template()).markup, /class="correlation-evidence"/);
+  panel.controller.state.transcriptId = "rpc-spawn-other";
+  panel.controller.state.transcriptAt = 1;
+  panel.controller.state.transcript = { text: "scope-private evidence" };
+  const context = panelContext();
+  context.state!.selectedSession!.id = "other-session";
+  panel.controller.update(context);
+  assert.doesNotMatch(parts(panel.template()).text, /scope-private evidence|Outcome unknown/);
+});
+
+test("paused graph and separate stopped output retain provenance without state reconciliation", () => {
+  const panel = new TestPanel();
+  panel.controller.state.status = graphSnapshot();
+  const root = panel.controller.state.status.asyncSnapshot!.runs[0]!;
+  root.state = "paused";
+  (panel as unknown as { selected: string }).selected = graphEntries([root])[0]!.key;
+  panel.controller.state.transcriptId = root.id;
+  panel.controller.state.transcriptAt = 0;
+  panel.controller.state.transcript = { text: "State: stopped" };
+  const result = parts(panel.template());
+  for (const text of ["Paused is the engine-reported snapshot state", "including after stop", "may create a new run ID", "do not repeat resume", "Separate cached exact-run read", "State: stopped"]) assert.ok(result.text.includes(text), text);
+  assert.equal(root.state, "paused");
+});
+
 test("C8: selectable schedules use unique protocol-valid exact IDs, never labels or positions", () => {
   const records = [{ id: "safe-id", name: "same", paused: false }, { id: "other", name: "same", paused: false }];
   assert.equal(selectableSchedule(records, "safe-id"), true);

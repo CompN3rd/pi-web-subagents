@@ -172,3 +172,37 @@ test("criterion 4: nested/missing/duplicate targets and invalid line bounds neve
   assert.equal(h.reads().length, 0);
   h.controller.unmount();
 });
+
+for (const change of ["none", "target", "hidden", "scope"] as const) {
+  test(`spawn correlation recovery ${change}: cached evidence never changes outcome, targets or scope`, async () => {
+    const pending = deferred<unknown>();
+    const h = await setup(async (input) => {
+      if (input.method === "spawn") throw new Error("Response lost after admission");
+      if (input.method === "status" && input.params?.id?.startsWith("rpc-spawn-")) return pending.promise;
+      return reply(input);
+    });
+    await h.controller.perform("spawn", { script: "return 1", async: true }, true);
+    const receipt = h.controller.currentReceipts[0]!;
+    h.controller.selectOutput("");
+    const recovery = h.controller.recoverSpawn(receipt.requestId);
+    await tick();
+    const read = h.reads().at(-1)!;
+    assert.deepEqual(read.input.params, { id: `rpc-spawn-${receipt.requestId}` });
+    if (change === "target") h.controller.selectOutput("run-1");
+    if (change === "hidden") h.controller.setVisible(false);
+    if (change === "scope") h.controller.update({ ...h.context, state: { ...h.context.state, selectedSession: { ...h.context.state!.selectedSession!, id: "other-session" } } });
+    pending.resolve(reply(read.input, { text: "State: complete; returned-id", details: { asyncId: "returned-id" } }));
+    await recovery;
+    if (change === "none") {
+      assert.equal(h.controller.state.transcript?.text, "State: complete; returned-id");
+      assert.equal(h.controller.state.transcriptId, `rpc-spawn-${receipt.requestId}`);
+      assert.equal(h.controller.state.transcriptAt, h.clock.now());
+      assert.ok(!h.controller.state.status?.asyncSnapshot?.runs.some((node) => node.id === "returned-id"));
+    } else assert.equal(h.controller.state.transcript, undefined, "obsolete evidence cannot leak across epochs/scopes");
+    assert.equal(receipt.state, "unknown");
+    await h.clock.advance(5000);
+    assert.equal(h.calls.filter(({ input }) => input.method === "spawn").length, 1);
+    assert.equal(h.reads().length, 1, "correlation read never auto-follows/retries");
+    h.controller.unmount();
+  });
+}

@@ -535,3 +535,37 @@ test("controller does not treat fresh host peer wrappers as a scope change", asy
   assert.equal(h.clock.timers.size, 1);
   h.controller.unmount();
 });
+
+for (const stoppedText of ["State: stopped", "État ciblé : arrêté — texte fourni"]) {
+  test(`lifecycle provenance keeps paused snapshot separate from resume identity and targeted output: ${stoppedText}`, async () => {
+    const global = snapshot();
+    global.fleet.totalActive = 0;
+    global.asyncSnapshot.runs[0]!.state = "paused";
+    global.asyncSnapshot.runs[0]!.children[0]!.state = "paused";
+    const h = await setup(async (input) => {
+      if (input.method === "status") return reply(input, input.params?.id ? { ...global, text: stoppedText } : global);
+      if (input.method === "resume") return reply(input, { text: "New reported run: resumed-id", details: { asyncId: "resumed-id" } });
+      return reply(input);
+    });
+    await h.controller.perform("resume", { id: "run-1", message: "continue saved contract" }, true);
+    assert.equal(h.controller.currentReceipts[0]!.details?.asyncId, "resumed-id");
+    assert.equal(h.controller.state.status!.asyncSnapshot!.runs[0]!.id, "run-1");
+    assert.equal(h.controller.state.status!.asyncSnapshot!.runs[0]!.state, "paused");
+    await h.controller.perform("stop", { id: "run-1" }, true);
+    h.controller.selectOutput("run-1");
+    await h.controller.readOutput();
+    for (let poll = 0; poll < 2; poll++) {
+      global.asyncSnapshot.generatedAt++;
+      await h.controller.refresh();
+    }
+    assert.equal(h.controller.state.status!.asyncSnapshot!.runs[0]!.state, "paused");
+    assert.equal(h.controller.state.status!.asyncSnapshot!.runs[0]!.children![0]!.state, "paused");
+    assert.equal(h.controller.state.status!.fleet!.totalActive, 0);
+    assert.equal(h.controller.state.transcript?.text, stoppedText);
+    assert.equal(h.controller.state.transcriptId, "run-1");
+    assert.match(h.controller.currentReceipts[0]!.message, /Not terminal proof/);
+    assert.equal(h.calls.filter((call) => call.method === "resume").length, 1);
+    assert.equal(h.calls.filter((call) => call.method === "stop").length, 1);
+    h.controller.unmount();
+  });
+}

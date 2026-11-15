@@ -53,6 +53,14 @@ const context = panelContext(async (input) => {
       outcome: "unknown",
       message: "Fixture uncertain launch; do not repeat",
     };
+  if (input.method === "status" && input.params?.id?.startsWith("rpc-spawn-")) return reply(input, {
+    text: 'State: complete; Run: returned-correlation-id <img src=x onerror="window.evil=true">',
+    details: { asyncId: "returned-correlation-id", toolCallId: input.params.id },
+  });
+  if (input.method === "resume") {
+    if (!status.asyncSnapshot!.runs.some((node) => node.id === "resumed-run")) status.asyncSnapshot!.runs.push({ id: "resumed-run", label: "Resumed root", kind: "subagent", state: "complete" });
+    return reply(input, { text: "Resumed saved contract as resumed-run", details: { asyncId: "resumed-run" } });
+  }
   if (input.method === "cost") return reply(input, {
     version: 1, parent: { ...usage, cost: 0.0728648 }, children: [],
     childTotal: { ...usage, cost: 0.0876352 }, total: { ...usage, cost: 0.0728648 + 0.0876352 },
@@ -194,6 +202,7 @@ Object.assign(window, {
       );
     },
     setRootLabel(label: string) { status.asyncSnapshot!.runs.find((node) => node.id === "run-1")!.label = label; },
+    setRootState(state: "paused" | "running") { status.asyncSnapshot!.runs.find((node) => node.id === "run-1")!.state = state; },
     setOutput(value: string | undefined) { output = value; },
     duplicateSchedule() { schedules.push({ ...schedules[0]! }); },
     removeSchedule(id: string) { schedules = schedules.filter((record) => record.id !== id); },

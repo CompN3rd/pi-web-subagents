@@ -611,6 +611,7 @@ export class SubagentsPanel extends LitElement {
         <p class="meta">${[selectedRun.agent, selectedRun.model, selectedRun.thinking].filter(Boolean).join(" · ")}</p>
         ${nodeFacts(selectedRun, state.status?.asyncSnapshot?.generatedAt, this.content)}
         <details><summary>${t("snapshotEvidence")}</summary><pre>${JSON.stringify(selectedRun, null, 2)}</pre></details>
+        ${selectedRun.state === "paused" ? html`<p class="meta">${t("pausedControlNote")}</p>` : nothing}
         ${target ? html`<p>${t("target")} <code>${target}</code></p>
         ${selectedRun.kind === "workflow" ? html`<p class="meta workflow-output-note">${t("workflowOutputNote")}</p>` : nothing}
         <form
@@ -715,11 +716,11 @@ export class SubagentsPanel extends LitElement {
           </div>
         </form>
         <p class="meta">
-          ${t("controlNote")}
+          ${t("resumeNote")} ${t("controlNote")}
         </p>
         ${state.transcript && state.transcriptId === target
           ? html`<h3>${t("targetedOutput")} · ${state.transcriptId}</h3>
-              <p class="meta">${t("lastRead")} ${state.transcriptAt === undefined ? "" : this.content.date(state.transcriptAt)} · ${t(state.outputFollowing ? "following" : "notFollowing")}</p>
+              <p class="meta">${t("lastRead")} ${state.transcriptAt === undefined ? "" : this.content.date(state.transcriptAt)} · ${t(state.outputFollowing ? "following" : "notFollowing")}. ${t("outputProvenance")}</p>
               <pre class="targeted-output" tabindex="0" aria-label=${t("outputLabel")}
                 @scroll=${(event: Event) => {
                   const output = event.currentTarget as HTMLElement;
@@ -882,7 +883,16 @@ ${JSON.stringify(state.transcript.details, null, 2)}</pre
                       </button>
                       <p class="meta">
                         ${t("correlationNote", { id: `rpc-spawn-${receipt.requestId}` })}
-                      </p>`
+                      </p>
+                      ${state.transcript && state.transcriptId === `rpc-spawn-${receipt.requestId}` && state.transcriptAt !== undefined
+                        ? html`<div class="correlation-evidence">
+                            <h3>${t("correlationEvidence")}</h3>
+                            <code>${state.transcriptId}</code>
+                            <p class="meta">${t("lastRead")} ${this.content.date(state.transcriptAt)}</p>
+                            <p class="meta">${t("correlationReadNote")}</p>
+                            <pre tabindex="0" aria-label=${t("correlationEvidence")}>${state.transcript.text}</pre>
+                            ${state.transcript.details ? html`<details><summary>${t("evidence")}</summary><pre>${JSON.stringify(state.transcript.details, null, 2)}</pre></details>` : nothing}
+                          </div>` : nothing}`
                   : nothing}
               </li>`,
           )}
@@ -931,6 +941,7 @@ ${JSON.stringify(state.transcript.details, null, 2)}</pre
               <div><dt>${t("model")}</dt><dd>${this.confirmation.params.model ?? t("inheritModel")}</dd></div>
               ${this.confirmation.params.task ? html`<div><dt>${t("task")}</dt><dd class="reported-goal">${String(this.confirmation.params.task)}</dd></div>` : nothing}
             </dl>` : this.confirmation.method === "manage" ? html`<p>${t("scheduleAction")}: ${String(this.confirmation.params.action)} · ${t("scheduleId")}: <code>${String(this.confirmation.params.id)}</code></p>` : nothing}
+            ${this.confirmation.method === "resume" ? html`<p class="meta">${t("resumeNote")}</p>` : nothing}
             <pre>${JSON.stringify(this.confirmation.params, null, 2)}</pre>
             <button
               class="ui-button danger"
