@@ -228,6 +228,37 @@ try {
   await page.getByRole("button", { name: /Connected root/ }).waitFor();
   await refresh();
   const graph = page.locator('section[aria-labelledby="runs-heading"]');
+  // Bounded alpha density: static explanation is keyboard accessible, not safety state.
+  const guide = page.locator("details.panel-details");
+  assert.equal(await guide.getAttribute("open"), null);
+  const density = [];
+  for (const width of [600, 420]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.evaluate(() => window.scrollTo(0, 0));
+    const collapsedTop = (await graph.locator("button.run").first().boundingBox()).y;
+    assert.ok(collapsedTop < 900, `first reported node visible at ${width}px: ${collapsedTop}`);
+    assert.ok((await page.getByLabel("Filter reported nodes").boundingBox()).y < collapsedTop);
+    await page.getByText("Last observed snapshot", { exact: false }).waitFor();
+    await page.getByText("Bounded snapshot:", { exact: false }).waitFor();
+    await page.getByText("fleet entries omitted.", { exact: false }).waitFor();
+    assert.equal(await guide.locator(".warning, .error").count(), 0);
+    await page.screenshot({ path: join(artifacts, `alpha-roster-${width}.png`), fullPage: true });
+    await guide.locator("summary").focus();
+    await page.keyboard.press("Enter");
+    assert.notEqual(await guide.getAttribute("open"), null);
+    await refresh();
+    assert.notEqual(await guide.getAttribute("open"), null, "poll preserves guide disclosure");
+    const expandedTop = (await graph.locator("button.run").first().boundingBox()).y + await page.evaluate(() => scrollY);
+    assert.ok(expandedTop > collapsedTop + 100, "collapsed guide meaningfully advances roster");
+    await guide.locator("summary").focus();
+    await page.keyboard.press("Space");
+    assert.equal(await guide.getAttribute("open"), null);
+    await page.evaluate(() => window.scrollTo(0, 0));
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+    density.push({ width, collapsedTop, expandedTop });
+  }
+  await writeFile(join(artifacts, "alpha-density.json"), JSON.stringify(density, null, 2));
+  await page.setViewportSize({ width: 1150, height: 1000 });
   const additionalAgents = graph.locator("details.unlinked-agents");
   assert.equal(await additionalAgents.getAttribute("open"), null);
   await additionalAgents.locator(":scope > summary").click();
@@ -343,10 +374,13 @@ try {
   await page.getByText("Read-only snapshot.", { exact: false }).waitFor();
   assert.equal(await stop.count(), 0);
   assert.equal(await page.getByRole("button", { name: "Load transcript", exact: true }).count(), 0);
+  assert.equal(await page.getByRole("button", { name: "Follow output", exact: true }).count(), 0);
   assert.deepEqual(await mutationCalls(), beforeGraph);
   await connected.getByRole("button", { name: /Deepest / }).click();
   await page.getByText("Read-only snapshot.", { exact: false }).waitFor();
   assert.equal(await stop.count(), 0);
+  assert.equal(await page.getByRole("button", { name: "Load transcript", exact: true }).count(), 0);
+  assert.equal(await page.getByRole("button", { name: "Follow output", exact: true }).count(), 0);
   await page.getByRole("button", { name: "Back to reported runs", exact: true }).click();
   const search = page.getByLabel("Filter reported nodes");
   await search.fill("Isolated root");
@@ -366,9 +400,14 @@ try {
   await connected.getByText("needs_attention", { exact: true }).waitFor();
   await search.fill("active_long_running");
   assert.equal(await graph.locator(".graph-root:visible").count(), 0, "long-running activity alone is not attention");
+  await search.fill("Connected root");
+  await stateFilter.selectOption("active");
+  assert.equal(await graph.locator(".graph-root:visible").count(), 1);
+  await stateFilter.selectOption("recent");
+  assert.equal(await graph.locator(".graph-root:visible").count(), 0, "running root is not other/recent");
   await stateFilter.selectOption("all");
   await search.fill("");
-  assert.deepEqual(await mutationCalls(), beforeGraph, "attention filtering never performs mutations");
+  assert.deepEqual(await mutationCalls(), beforeGraph, "all state filters are presentation-only");
   await root.click();
   await page.locator('textarea[name="message"]').fill("graph scope draft");
   await page.evaluate(() => window.fixture.switchSession("session-graph"));
@@ -418,6 +457,10 @@ try {
   await branchSummary.click();
 
   // Existing inspector actions still target only the selected authoritative root.
+  const interruptsBefore = (await mutationCalls()).filter((call) => call.method === "interrupt").length;
+  await page.getByRole("button", { name: "Interrupt run…", exact: true }).click();
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  assert.equal((await mutationCalls()).filter((call) => call.method === "interrupt").length, interruptsBefore);
   await page.getByRole("button", { name: "Interrupt run…", exact: true }).click();
   await page.getByRole("button", { name: "Confirm interrupt", exact: true }).click();
   await page.getByText("interrupt · accepted", { exact: true }).waitFor();
@@ -429,6 +472,54 @@ try {
     assert.equal(call.params.id, "run-1");
     assert.equal("childId" in call.params, false);
   }
+  // All steering delivery modes are exact-root operations, never completion proof.
+  for (const mode of ["steer", "follow_up"]) {
+    await page.locator('select[name="mode"]').selectOption(mode);
+    await page.locator('textarea[name="message"]').fill(`explicit ${mode}`);
+    await page.getByRole("button", { name: "Review / send message", exact: true }).click();
+    await page.waitForFunction((mode) => window.fixture.calls.some((call) => call.method === "steer" && call.params.mode === mode), mode);
+    assert.deepEqual((await mutationCalls()).filter((call) => call.method === "steer").at(-1).params, { id: "run-1", message: `explicit ${mode}`, mode });
+    assert.equal(await page.locator(".confirmation").count(), 0);
+  }
+  await page.locator('select[name="action"]').selectOption("resume");
+  await page.locator('textarea[name="message"]').fill("resume saved contract only");
+  const resumesBefore = (await mutationCalls()).filter((call) => call.method === "resume").length;
+  await page.getByRole("button", { name: "Review / send message", exact: true }).click();
+  assert.deepEqual(JSON.parse(await page.locator(".confirmation pre").textContent()), { id: "run-1", message: "resume saved contract only" });
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  assert.equal((await mutationCalls()).filter((call) => call.method === "resume").length, resumesBefore);
+  await page.getByRole("button", { name: "Review / send message", exact: true }).click();
+  await page.getByRole("button", { name: "Confirm resume", exact: true }).click();
+  await page.getByText("resume · accepted", { exact: true }).waitFor();
+  assert.deepEqual((await mutationCalls()).filter((call) => call.method === "resume").at(-1).params, { id: "run-1", message: "resume saved contract only" });
+  // Capability revocation between review and confirm fails closed at dispatch.
+  await page.getByRole("button", { name: "Review / send message", exact: true }).click();
+  await page.evaluate(() => { document.querySelector("body>div").firstElementChild.controller.state.ping.capabilities.resume = false; });
+  await page.getByRole("button", { name: "Confirm resume", exact: true }).click();
+  await page.getByRole("alert").filter({ hasText: "Capability unavailable" }).waitFor();
+  assert.equal((await mutationCalls()).filter((call) => call.method === "resume").length, resumesBefore + 1);
+  await page.evaluate(() => { document.querySelector("body>div").firstElementChild.controller.state.ping.capabilities.resume = true; window.fixture.rejectNextOperation("resume"); });
+  await page.getByRole("button", { name: "Review / send message", exact: true }).click();
+  await page.getByRole("button", { name: "Confirm resume", exact: true }).click();
+  await page.getByText("resume · failed", { exact: true }).waitFor();
+  await page.getByRole("alert").filter({ hasText: "Fixture operation rejected" }).waitFor();
+  await page.waitForTimeout(2200);
+  assert.equal((await mutationCalls()).filter((call) => call.method === "resume").length, resumesBefore + 2, "rejected resume never retries");
+  await page.locator('select[name="action"]').selectOption("steer");
+  await page.locator('select[name="mode"]').selectOption("auto");
+  // Workflow root can read its exact target, but cannot promise child transcripts.
+  await page.getByText(/Workflow roots may have no transcript/).waitFor();
+  const noTranscript = 'No transcript lines available. Use child index 0. <img src=x onerror="window.evil=true">';
+  await page.evaluate((text) => window.fixture.setOutput(text), noTranscript);
+  await page.getByRole("button", { name: "Load transcript", exact: true }).click();
+  await page.getByLabel("Targeted run output", { exact: true }).waitFor();
+  assert.equal(await page.getByLabel("Targeted run output", { exact: true }).textContent(), noTranscript);
+  assert.equal(await page.locator("img").count(), 0);
+  const rootRead = await page.evaluate(() => window.fixture.calls.filter((call) => call.method === "status" && call.params?.id).at(-1));
+  assert.equal(rootRead.params.id, "run-1");
+  assert.equal(rootRead.params.view, "transcript");
+  assert.ok(rootRead.params.lines >= 1 && rootRead.params.lines <= 500);
+  await page.evaluate(() => window.fixture.setOutput(undefined));
   await page.evaluate(() => window.fixture.setUncertain(true));
   // C6: focused form is explicitly opened; only the current mode's fields exist.
   await page.getByRole("button", { name: "New run", exact: true }).focus();
@@ -437,6 +528,12 @@ try {
   assert.equal(await page.locator('textarea[name="args"]').count(), 0);
   await page.locator('textarea[name="source"]').fill("worker");
   await page.locator('textarea[name="task"]').fill("fixture task");
+  await page.locator('input[name="label"]').fill("  UI launch smoke  ");
+  await page.getByText("Requested label; engine-reported run names may differ.", { exact: true }).waitFor();
+  await page.getByRole("button", { name: "Review launch…", exact: true }).click();
+  assert.match(await page.locator(".confirmation pre").textContent(), /"label": "UI launch smoke"/);
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  assert.equal((await mutationCalls()).filter((call) => call.method === "spawn").length, 0);
   await page.getByRole("button", { name: "Review launch…", exact: true }).click();
   await page.getByRole("button", { name: "Confirm spawn", exact: true }).click();
   await page.getByText("spawn · unknown", { exact: true }).waitFor();
@@ -444,6 +541,10 @@ try {
   assert.equal((await mutationCalls()).filter((call) => call.method === "spawn").length, 1, "unknown receipt never auto retries");
   const spawnCall = (await mutationCalls()).find((call) => call.method === "spawn");
   assert.equal("model" in spawnCall.params, false, "blank model inherits");
+  assert.equal(spawnCall.params.label, "UI launch smoke");
+  await page.getByRole("button", { name: "Inspect spawn correlation (read only)", exact: true }).click();
+  await page.waitForFunction((id) => window.fixture.calls.some((call) => call.method === "status" && call.params?.id === `rpc-spawn-${id}`), spawnCall.requestId);
+  assert.equal((await mutationCalls()).filter((call) => call.method === "spawn").length, 1, "correlation inspection is a read, not a retry");
   await page.locator('select[name="kind"]').selectOption("workflow");
   assert.equal(await page.locator('textarea[name="task"]').count(), 0);
   assert.equal(await page.locator('textarea[name="source"]').inputValue(), "", "mode switch clears source");
@@ -466,6 +567,61 @@ try {
   await page.getByRole("button", { name: "Close launch form", exact: true }).click();
   assert.equal(await page.locator("#new-run").evaluate((element) => element.getRootNode().activeElement === element), true);
   assert.equal((await mutationCalls()).filter((call) => call.method === "spawn").length, 1);
+  // An accepted request is not a label-persistence guarantee or a local caption override.
+  const reportedRootLabel = await root.textContent();
+  await page.evaluate(() => { window.fixture.setUncertain(false); window.fixture.setRootLabel("scout"); });
+  await page.getByRole("button", { name: "New run", exact: true }).click();
+  await page.locator('select[name="kind"]').selectOption("agent");
+  await page.locator('textarea[name="source"]').fill("scout");
+  await page.getByRole("button", { name: "Review launch…", exact: true }).click();
+  await page.getByRole("button", { name: "Confirm spawn", exact: true }).click();
+  await page.getByText("spawn · accepted", { exact: true }).waitFor();
+  await refresh();
+  await page.getByRole("button", { name: "scout", exact: true }).waitFor();
+  assert.equal(await page.getByRole("button", { name: "UI launch smoke", exact: true }).count(), 0);
+  assert.match(await page.locator("#control-heading").textContent(), /scout/);
+  assert.match(await page.locator(".inspector").textContent(), /run-1/);
+  await page.getByRole("button", { name: "Close launch form", exact: true }).click();
+  await page.evaluate((label) => window.fixture.setRootLabel(label), reportedRootLabel);
+  await refresh();
+
+  // Complete remaining launch modes and both contexts through the actual form.
+  for (const [kind, context] of [["workflow", "fork"], ["script", "fresh"]]) {
+    await page.getByRole("button", { name: "New run", exact: true }).click();
+    await page.locator('select[name="kind"]').selectOption(kind);
+    await page.locator('textarea[name="source"]').fill(`${kind}.ts`);
+    await page.locator('textarea[name="args"]').fill('{"goal":"isolated fake test"}');
+    await page.locator('select[name="context"]').selectOption(context);
+    await page.getByRole("button", { name: "Review launch…", exact: true }).click();
+    const params = JSON.parse(await page.locator(".confirmation pre").textContent());
+    assert.equal(params[kind], `${kind}.ts`);
+    assert.equal(params.context, context);
+    assert.equal("task" in params, false);
+    const before = (await mutationCalls()).filter((call) => call.method === "spawn").length;
+    await page.getByRole("button", { name: "Confirm spawn", exact: true }).click();
+    await page.waitForFunction((count) => window.fixture.calls.filter((call) => call.method === "spawn").length === count, before + 1);
+    assert.deepEqual((await mutationCalls()).filter((call) => call.method === "spawn").at(-1).params, params);
+    await page.getByRole("button", { name: "Close launch form", exact: true }).click();
+  }
+
+  // Helpers stage ordinary parent intent only, preserving drafts and unrelated chips.
+  const beforeHelpers = await mutationCalls();
+  await page.evaluate(() => window.fixture.setDraft("existing parent draft"));
+  await page.getByRole("button", { name: "Prepare supervisor-help message", exact: true }).click();
+  await page.getByText(/Ordinary parent message staged as a chip/).waitFor();
+  assert.equal(await page.evaluate(() => window.fixture.draft), "existing parent draft");
+  assert.equal(await page.evaluate(() => window.fixture.chips.at(-1).id), "supervisor-help");
+  const navigationBefore = await page.evaluate(() => window.fixture.navigation.length);
+  await page.getByRole("button", { name: "Prepare /subagents command (manual send)", exact: true }).click();
+  await page.getByText(/Existing draft preserved/).waitFor();
+  assert.equal(await page.evaluate(() => window.fixture.navigation.length), navigationBefore);
+  await page.evaluate(() => window.fixture.setDraft(""));
+  await page.getByRole("button", { name: "Prepare /subagents command (manual send)", exact: true }).click();
+  await page.getByText(/Remove ALL composer chips/).last().waitFor();
+  assert.equal(await page.evaluate(() => window.fixture.draft), "/subagents");
+  assert.deepEqual(await page.evaluate(() => window.fixture.removedChips), ["supervisor-help"]);
+  assert.deepEqual(await page.evaluate(() => window.fixture.navigation.at(-1)), { machineId: "machine-1", projectId: "project-1", workspaceId: "workspace-1", sessionId: "session-graph", view: "chat" });
+  assert.deepEqual(await mutationCalls(), beforeHelpers, "helpers never execute RPC or send parent messages");
 
   // C8: selectable exact records, cached provenance, escaped details/history and all seven actions.
   const schedulesButton = page.getByRole("button", { name: "List schedules", exact: true });
@@ -524,6 +680,11 @@ try {
   await page.getByRole("columnheader", { name: "Cache write", exact: true }).waitFor();
   await page.getByRole("columnheader", { name: "Turns", exact: true }).waitFor();
   assert.equal(await page.locator(".usage-table tbody tr").count(), 3);
+  const displayedTotal = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 4, maximumFractionDigits: 8 }).format(0.1605);
+  assert.ok((await page.locator(".total").textContent()).includes(displayedTotal));
+  assert.ok((await page.locator(".usage-table tbody tr").last().textContent()).includes(displayedTotal));
+  assert.doesNotMatch(await page.locator(".total").textContent(), /16049999999999998/);
+  assert.equal(await page.evaluate(() => document.querySelector("body>div").firstElementChild.controller.state.cost.total.cost), 0.0728648 + 0.0876352);
   assert.match(await page.locator(".usage-table").textContent(), /Parent[\s\S]*Child total[\s\S]*Total/);
   await page.waitForTimeout(2200);
   assert.equal((await mutationCalls()).filter((call) => call.method === "cost").length, costsBefore + 1);
@@ -822,6 +983,7 @@ try {
     artifacts,
     browserCrypto,
     mobileVisibility,
+    density,
     requestIds,
     scope:
       "Real browser and built adapter with fake public host/peer; NOT live PI WEB daemon",
@@ -843,8 +1005,14 @@ try {
       "reduced-motion emulation; output scroll behavior is immediate, not smooth",
       "A5–A7/A13: progress/age, tool duration, activity, counts and monitor facts visible without JSON",
       "A9: unlinked fleet input/output/spent/window metrics, no control targets",
-      "C5: accessible on-demand usage table including caches and turns; no accounting polling",
-      "C6: focused keyboard-opened launch, mode-only fields, cleared mode drafts, JSON-object validation, inherited/explicit model, readable confirmation, focus restoration",
+      "Alpha: 600px desktop and 420x900 mobile roster screenshots; visible freshness/omission warnings, keyboard guide disclosure retained across polling, no horizontal overflow",
+      "Alpha: workflow-root no-transcript evidence remains escaped, exact-root bounded read only; child output/follow controls unavailable",
+      "Alpha: requested-label caveat, exact trimmed confirmation payload, cancel sends nothing, accepted receipt does not override reported scout caption or root identity",
+      "C5: accessible on-demand usage table including caches and turns; binary-noise total formatted consistently without mutating accounting; no accounting polling",
+      "C6: all three launch modes, fresh/fork contexts, mode-only fields, cleared drafts, JSON validation, inherited/explicit model, readable confirmation, focus restoration, unknown spawn correlation read",
+      "Expanded controls: interrupt cancellation; steer/auto/follow_up exact payloads; resume cancel/confirm, revoked capability and failed receipt without retry",
+      "Expanded helpers: supervisor chip preserves draft; admin draft protection, own-chip removal, exact parent navigation and manual-send caveat; no RPC execution",
+      "Expanded filters: all, active, attention and other/recent selectors are presentation-only",
       "C8: on-demand selectable schedules, exact detail/history, escaped evidence, cached list survives reads, all seven actions, four confirmed mutations, duplicate/removal revokes pending action, narrow-screen containment",
       "stop requires confirmation",
       "cancel/confirm focus",

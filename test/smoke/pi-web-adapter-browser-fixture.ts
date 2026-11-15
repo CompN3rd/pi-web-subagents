@@ -7,6 +7,7 @@ import {
   reply,
   snapshot,
   graphSnapshot,
+  usage,
 } from "../../test/browser-fixtures.ts";
 import { localizationFixture, stylesheetFixture } from "../host-fixtures.ts";
 // Retain the real observer while allowing deterministic batched-transition tests.
@@ -28,6 +29,7 @@ const calls: any[] = [];
 let listener: any;
 let fail = false;
 let uncertain = false;
+let rejectNext = "";
 let output: string | undefined;
 let schedules = [
   { id: "schedule-1", name: '<img src=x onerror="window.evil=true"> Daily checks', paused: false, quiet: true, lastRunId: "read-only-ref" },
@@ -37,6 +39,11 @@ let status = snapshot(true) as ReturnType<typeof graphSnapshot>;
 const context = panelContext(async (input) => {
   calls.push(input);
   if (fail) throw new Error("fixture disconnected");
+  if (input.method === rejectNext) {
+    rejectNext = "";
+    return { version: 1, requestId: input.requestId, method: input.method, success: false,
+      error: { code: "invalid_state", message: "Fixture operation rejected" } };
+  }
   if (uncertain && input.method === "spawn")
     return {
       version: 1,
@@ -46,6 +53,11 @@ const context = panelContext(async (input) => {
       outcome: "unknown",
       message: "Fixture uncertain launch; do not repeat",
     };
+  if (input.method === "cost") return reply(input, {
+    version: 1, parent: { ...usage, cost: 0.0728648 }, children: [],
+    childTotal: { ...usage, cost: 0.0876352 }, total: { ...usage, cost: 0.0728648 + 0.0876352 },
+    unresolvedAsyncChildren: 0,
+  });
   if (input.method === "manage") return reply(input, { text: `Original ${input.params?.action} text`, details: { schedules:
     input.params?.action === "schedule.history" ? { runs: [
       { id: "history-1", scheduleId: input.params.id, state: "failed", error: '<img src=x onerror="window.evil=true"> literal history error', asyncId: "read-only-ref" },
@@ -70,6 +82,11 @@ const context = panelContext(async (input) => {
 });
 const chips: any[] = [];
 const navigation: any[] = [];
+const removedChips: string[] = [];
+let draft = "";
+context.prompt.getText = () => draft;
+context.prompt.insertText = (text) => { draft += text; };
+context.prompt.removeChip = (id) => { removedChips.push(id); };
 context.prompt.setChip = (chip) => chips.push(chip);
 context.navigate = async (dest) => {
   navigation.push(dest);
@@ -140,6 +157,9 @@ Object.assign(window, {
     styles,
     chips,
     navigation,
+    removedChips,
+    setDraft(value: string) { draft = value; },
+    get draft() { return draft; },
     context,
     batchVisibility(visible: boolean) {
       if (!observed) throw new Error("Panel did not observe visibility");
@@ -173,6 +193,7 @@ Object.assign(window, {
         (root) => root.id !== id,
       );
     },
+    setRootLabel(label: string) { status.asyncSnapshot!.runs.find((node) => node.id === "run-1")!.label = label; },
     setOutput(value: string | undefined) { output = value; },
     duplicateSchedule() { schedules.push({ ...schedules[0]! }); },
     removeSchedule(id: string) { schedules = schedules.filter((record) => record.id !== id); },
@@ -182,6 +203,7 @@ Object.assign(window, {
     setUncertain(value: boolean) {
       uncertain = value;
     },
+    rejectNextOperation(method: string) { rejectNext = method; },
     switchSession(id: string) {
       context.state!.selectedSession = {
         ...context.state!.selectedSession!,

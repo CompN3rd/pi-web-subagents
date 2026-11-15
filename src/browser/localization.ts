@@ -17,6 +17,7 @@ export const sources = {
   polling: "Visible polling: 2s active / 10s idle.",
   hidden: "Hidden or closed panels pause observation, not execution.",
   capabilities: "Capabilities & boundaries",
+  panelDetails: "Scope, capabilities & snapshot guide",
   methods: "Advertised methods: {methods}",
   noCapabilities: "Capabilities unavailable until a successful handshake.",
   boundaries: "Disabled actions require a ready selection and advertised capability. Child controls, direct supervisor reply cards, general configuration editors, and full transcript streaming are unavailable.",
@@ -127,6 +128,7 @@ export const sources = {
   following: "following",
   notFollowing: "not following (cached)",
   followNote: "Follow reads only this selected run, up to 500 lines, every 2s after each read completes. Hidden/closed panels, target changes and read failures turn follow off; execution continues. Output is escaped text, not a structured transcript or full history.",
+  workflowOutputNote: "Workflow roots may have no transcript. Nested snapshot details are read-only; exact child transcript targets are not provided. Follow only repeats the root read; it does not follow child output.",
   scrollPaused: "Auto-scroll paused while inspecting earlier output. Jump to latest to restore it.",
   outputReadError: "Output read failed; cached output may be stale. Follow stopped. Retry explicitly. {error}",
   workflowTrace: "Reported workflow trace",
@@ -164,6 +166,7 @@ export const sources = {
   model: "Model (optional)",
   inheritModel: "Inherit engine default (no override)",
   label: "Label (optional)",
+  requestedLabelNote: "Requested label; engine-reported run names may differ.",
   launchNote: "Async-only. No cwd, output paths, tools, clarification, or other advanced parameters. Upstream owns execution.",
   reviewLaunch: "Review launch…",
   invalidLaunch: "Invalid launch arguments: {error}",
@@ -397,8 +400,13 @@ export function createContent(localization?: PluginLocalization) {
       return localization?.date(value, options) ?? new Intl.DateTimeFormat(undefined, options).format(value);
     },
     cost(value: number): string {
-      // Upstream reports USD, independently of regional preferences.
-      const options = { style: "currency", currency: "USD", minimumFractionDigits: 4, maximumFractionDigits: 20 } as const;
+      if (!Number.isFinite(value)) return messages?.t("unknown", {}) ?? sources.unknown;
+      // Display precision only; upstream accounting remains unchanged. Scientific
+      // notation keeps tiny nonzero USD costs visible rather than rounding to zero.
+      const options = {
+        style: "currency", currency: "USD", minimumFractionDigits: 4, maximumFractionDigits: 8,
+        notation: value !== 0 && Math.abs(value) < 1e-8 ? "scientific" : "standard",
+      } as const;
       return localization?.number(value, options) ?? new Intl.NumberFormat(undefined, options).format(value);
     },
   };

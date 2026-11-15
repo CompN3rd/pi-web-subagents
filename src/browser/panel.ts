@@ -125,9 +125,6 @@ export function overview(
           >${fleet ? t("reportedActive", { count: content.number(fleet.totalActive) }) : t("unavailable")}</span
         >
       </h2>
-      <p class="meta">
-        ${t("fleetNote")}
-      </p>
       ${fleet
         ? html`${fleet.topLevelAsyncCapacity
               ? fleet.topLevelAsyncCapacity.limit > 0
@@ -144,14 +141,10 @@ export function overview(
         : html`<p>
             ${t("noFleet")}
           </p>`}
-      <p id="graph-description" class="meta">
-        ${t("graphNote")}
-      </p>
       ${filterControls}
       ${snapshot
         ? html`<p class="meta">
               ${t("generated", { date: content.date(snapshot.generatedAt) })}
-              ${t("factsAtSnapshot")}
             </p>
             ${snapshot.omitted.runs ||
             snapshot.omitted.children ||
@@ -568,18 +561,9 @@ export class SubagentsPanel extends LitElement {
         </button>
         <button id="new-run" class="ui-button" aria-expanded=${this.launchOpen} aria-controls="launch-form" @click=${this.toggleLaunch}>${t("newRun")}</button>
       </header>
-      <p class="scope">
-        ${state.scope
-          ? `${state.scope.machineId} / ${state.scope.projectId} / ${state.scope.workspaceId} / ${state.scope.sessionId}`
-          : t("noSelection")}
-      </p>
+      ${!state.scope ? html`<p class="warning">${t("noSelection")}</p>` : nothing}
       <p class=${state.stale ? "warning" : "meta"} role="status">
         ${snapshotNotice(state, this.content)}
-      </p>
-      <p class="meta">
-        ${state.ping?.events.jobsChanged === "subagent:jobs-changed"
-          ? t("events")
-          : t("polling")} ${t("hidden")}
       </p>
       ${state.error
         ? html`<p class="error" role="alert">${state.error}</p>`
@@ -587,8 +571,13 @@ export class SubagentsPanel extends LitElement {
       ${this.notice
         ? html`<p class="notice" role="status">${this.notice}</p>`
         : nothing}
-      <details>
-        <summary>${t("capabilities")}</summary>
+      <details class="panel-details">
+        <summary>${t("panelDetails")}</summary>
+        ${state.scope ? html`<p class="scope">${state.scope.machineId} / ${state.scope.projectId} / ${state.scope.workspaceId} / ${state.scope.sessionId}</p>` : nothing}
+        <p class="meta">${state.ping?.events.jobsChanged === "subagent:jobs-changed" ? t("events") : t("polling")} ${t("hidden")}</p>
+        <p class="meta">${t("fleetNote")}</p>
+        <p id="graph-description" class="meta">${t("graphNote")} ${t("factsAtSnapshot")}</p>
+        <h2>${t("capabilities")}</h2>
         <p>
           ${state.ping
             ? t("methods", { methods: state.ping.methods.join(", ") })
@@ -623,6 +612,7 @@ export class SubagentsPanel extends LitElement {
         ${nodeFacts(selectedRun, state.status?.asyncSnapshot?.generatedAt, this.content)}
         <details><summary>${t("snapshotEvidence")}</summary><pre>${JSON.stringify(selectedRun, null, 2)}</pre></details>
         ${target ? html`<p>${t("target")} <code>${target}</code></p>
+        ${selectedRun.kind === "workflow" ? html`<p class="meta workflow-output-note">${t("workflowOutputNote")}</p>` : nothing}
         <form
           @submit=${(event: Event) => {
             const data = this.form(event);
@@ -786,9 +776,10 @@ ${JSON.stringify(state.transcript.details, null, 2)}</pre
               <label
                 >${t("model")} <input name="model" maxlength="256" /></label
               ><label
-                >${t("label")} <input name="label" maxlength="160"
+                >${t("label")} <input name="label" maxlength="160" aria-describedby="requested-label-note"
               /></label>
             </div>
+            <p id="requested-label-note" class="meta">${t("requestedLabelNote")}</p>
             <p class="meta">
               ${t("launchNote")} ${t("launchCatalogNote")}
             </p>
@@ -1130,6 +1121,7 @@ ${JSON.stringify(state.transcript.details, null, 2)}</pre
     [hidden] { display: none !important; }
     .fleet-workspace { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; align-items: start; }
     .roster, .inspector { min-inline-size: 0; }
+    .roster > section { margin-top: 12px; padding-top: 12px; }
     .filters { display: flex; flex-wrap: wrap; gap: 12px; }
     .filters label { flex: 1; min-inline-size: 120px; }
     .fleet-workspace .forest { grid-template-columns: minmax(0, 1fr); }

@@ -97,6 +97,42 @@ test("C6: launch confirmation uses only mode-relevant fields and omits blank mod
   assert.throws(() => launchParams(data));
 });
 
+test("requested launch labels are trimmed, optional and bounded without changing run identity", () => {
+  const data = new FormData();
+  for (const [key, value] of Object.entries({ kind: "agent", source: "scout", context: "fresh", label: "  UI launch smoke  " })) data.set(key, value);
+  assert.equal(launchParams(data).label, "UI launch smoke");
+  data.set("label", "  ");
+  assert.equal("label" in launchParams(data), false);
+  data.set("label", "x".repeat(160));
+  assert.equal(String(launchParams(data).label).length, 160);
+  data.set("label", "x".repeat(161));
+  assert.throws(() => launchParams(data));
+  const panel = new TestPanel();
+  panel.controller.state.status = snapshot() as StatusData;
+  panel.controller.state.status.asyncSnapshot!.runs[0]!.label = "scout";
+  const result = parts(panel.template());
+  assert.match(result.text, /Requested label; engine-reported run names may differ/);
+  assert.match(result.markup, /aria-describedby="requested-label-note"/);
+  assert.equal(graphEntries(panel.controller.state.status.asyncSnapshot!.runs)[0]!.controlId, "run-1");
+  assert.match(result.text, /scout/);
+});
+
+test("workflow root output explains child transcript limits without replacing reported text", () => {
+  const panel = new TestPanel();
+  panel.controller.state.status = graphSnapshot();
+  const root = graphEntries(panel.controller.state.status.asyncSnapshot!.runs)[0]!;
+  (panel as unknown as { selected: string }).selected = root.key;
+  panel.controller.state.transcript = { text: `No transcript lines. Use child index 0. ${graphHostile}` };
+  panel.controller.state.transcriptId = root.controlId!;
+  const result = parts(panel.template());
+  assert.match(result.text, /Workflow roots may have no transcript/);
+  assert.match(result.text, /exact child transcript targets are not provided/);
+  assert.match(result.text, /Follow only repeats the root read/);
+  assert.ok(result.text.includes(panel.controller.state.transcript.text));
+  assert.ok(!result.markup.includes(graphHostile));
+  assert.match(result.text, /Load transcript/);
+});
+
 test("C8: selectable schedules use unique protocol-valid exact IDs, never labels or positions", () => {
   const records = [{ id: "safe-id", name: "same", paused: false }, { id: "other", name: "same", paused: false }];
   assert.equal(selectableSchedule(records, "safe-id"), true);
@@ -319,13 +355,31 @@ test("C5: usage table preserves all supplied fields, identities, precision and r
   const fixture = localizationFixture();
   fixture.change("en", "de-DE", {});
   const content = parts(usageTable(cost, createContent(fixture.service)));
-  for (const label of ["Parent", "Child total", "Total", "Input", "Output", "Cache read", "Cache write", "Turns", "Cost (USD)", "identity unavailable", "1.234", "4.567", "0,000012345", "zero unresolved"])
+  for (const label of ["Parent", "Child total", "Total", "Input", "Output", "Cache read", "Cache write", "Turns", "Cost (USD)", "identity unavailable", "1.234", "4.567", "0,00001235", "zero unresolved"])
     assert.ok(content.text.includes(label), label);
   assert.equal((content.markup.match(/scope="row"/g) ?? []).length, 4);
   assert.match(content.markup, /<caption>/);
   assert.match(content.markup, /tabindex="0"/);
   assert.ok(!content.markup.includes(graphHostile));
   assert.ok(content.text.includes(graphHostile));
+});
+
+test("headline and usage rows share display precision without changing accounting", () => {
+  const panel = new TestPanel();
+  const usage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, turns: 0, cost: 0.0728648 + 0.0876352 };
+  const cost = { version: 1 as const, parent: usage, children: [], childTotal: { ...usage, cost: 1e-12 }, total: usage, unresolvedAsyncChildren: 0 };
+  const before = structuredClone(cost);
+  panel.controller.state.cost = cost;
+  panel.controller.state.costAt = 0;
+  const fixture = localizationFixture();
+  fixture.change("en", "de-DE", {});
+  const localized = createContent(fixture.service);
+  (panel as unknown as { content: typeof localized }).content = localized;
+  const result = parts(panel.template());
+  assert.equal(result.text.split(localized.cost(usage.cost)).length - 1, 3, "headline, parent and total use the same display formatter");
+  assert.ok(result.text.includes(localized.cost(1e-12)));
+  assert.doesNotMatch(result.text, /16049999999999998/);
+  assert.deepEqual(cost, before);
 });
 
 test("panel rendering does not perform peer IO", async () => {
@@ -545,6 +599,9 @@ test("A2/B1: nested and duplicate occurrences are readable but never control tar
     assert.ok(content.text.includes(entry.node.label));
     assert.ok(!content.text.includes("Load transcript"));
     assert.ok(!content.text.includes("Stop entire run"));
+    assert.ok(!content.text.includes("Follow output"));
+    assert.ok(!content.text.includes("Interrupt run"));
+    assert.ok(!content.text.includes("Review / send message"));
   }
   const before = graphEntries(roots).find((entry) => entry.node.id === "grandchild")!;
   roots.reverse();
@@ -619,7 +676,7 @@ test("graph disclosure counts all nodes, defaults closed above eight and keeps w
   controller.state.status = graphSnapshot();
   const content = parts(overview(controller.state, () => {}, ""));
   assert.match(content.markup, /aria-describedby="graph-description"/);
-  assert.match(content.text, /not execution order/);
+  assert.match(parts(new TestPanel().template()).text, /not execution order/);
   assert.match(content.text, /Fleet entries have no reported run relationship/);
   assert.match(content.text, /fleet entries omitted/);
   assert.match(content.text, /Bounded snapshot/);

@@ -4,7 +4,7 @@ import {
   SubagentsController,
   selectedScope,
 } from "../src/browser/controller.ts";
-import { MANAGEMENT_ACTIONS, type RpcInput } from "../src/protocol.ts";
+import { MANAGEMENT_ACTIONS, type JsonObject, type RpcInput, type RpcMethod } from "../src/protocol.ts";
 import {
   FakeClock,
   deferred,
@@ -396,6 +396,105 @@ test("controller cancellation retains unknown receipt only in exact initiating s
   h.controller.unmount();
   assert.equal(h.clock.timers.size, 0);
 });
+const exposedMutations: { name: string; method: RpcMethod; params: JsonObject }[] = [
+  { name: "agent launch", method: "spawn", params: { agent: "worker", async: true, context: "fork" } },
+  ...(["stop", "interrupt", "resume", "steer"] as const).map((method) => ({
+    name: method, method, params: { id: "run-1", ...(["resume", "steer"].includes(method) ? { message: "next" } : {}), ...(method === "steer" ? { mode: "follow_up" } : {}) },
+  })),
+  ...["pause", "resume", "run", "delete"].map((action) => ({ name: `schedule.${action}`, method: "manage" as const, params: { action: `schedule.${action}`, id: "disposable-disabled-demo" } })),
+];
+
+for (const operation of exposedMutations) {
+  test(`controller ${operation.name}: confirmation and revoked capability never reach transport`, async () => {
+    const h = await setup();
+    const before = h.calls.length;
+    if (operation.method !== "steer") {
+      await h.controller.perform(operation.method, operation.params);
+      assert.match(h.controller.state.error, /confirmation/i);
+      assert.equal(h.calls.length, before);
+    }
+    const capability = operation.method === "spawn" ? "asyncSpawn" : operation.method === "steer" ? "nonRecoveringSteer" : operation.method;
+    if (operation.method !== "manage") {
+      h.controller.state.ping!.capabilities[capability] = false;
+      await h.controller.perform(operation.method, operation.params, true);
+      assert.match(h.controller.state.error, /Capability/);
+      assert.equal(h.calls.length, before);
+      h.controller.state.ping!.capabilities[capability] = true;
+    }
+    if (operation.method === "manage") h.controller.state.ping!.capabilities.managementActions = [];
+    else h.controller.state.ping!.methods = h.controller.state.ping!.methods.filter((method) => method !== operation.method);
+    await h.controller.perform(operation.method, operation.params, true);
+    assert.match(h.controller.state.error, /Capability/);
+    assert.equal(h.calls.length, before);
+    assert.equal(h.controller.receipts.length, 0);
+    h.controller.unmount();
+  });
+
+  test(`controller ${operation.name}: rejection is failed, cancellation is unknown, neither retries`, async () => {
+    for (const outcome of ["rejected", "cancelled"] as const) {
+      const late = deferred<unknown>();
+      let admitted: RpcInput | undefined;
+      const h = await setup(async (input) => {
+        if (input.method !== operation.method) return reply(input);
+        admitted = input;
+        return outcome === "cancelled" ? late.promise : {
+          version: 1, requestId: input.requestId, method: input.method, success: false,
+          error: { code: "invalid_state", message: "Not admitted in this state" },
+        };
+      });
+      const pending = h.controller.perform(operation.method, operation.params, true);
+      await tick();
+      if (outcome === "cancelled") {
+        assert.equal(h.controller.state.busy, true);
+        const count = h.calls.length;
+        await h.controller.perform(operation.method, operation.params, true);
+        assert.equal(h.calls.length, count, "busy mutation cannot be double-submitted");
+        h.controller.setVisible(false);
+        assert.equal(h.signals.at(-1)!.aborted, true);
+      }
+      await pending;
+      assert.equal(h.controller.currentReceipts[0]!.state, outcome === "cancelled" ? "unknown" : "failed");
+      if (outcome === "cancelled") {
+        late.resolve(reply(admitted!));
+        await tick();
+        assert.equal(h.controller.currentReceipts[0]!.state, "unknown", "late success cannot rewrite cancelled observation");
+        h.controller.setVisible(true);
+        await tick();
+      }
+      await h.clock.advance(30000);
+      assert.equal(h.calls.filter((input) => input.method === operation.method).length, 1);
+      assert.equal(h.controller.state.busy, false);
+      h.controller.unmount();
+      assert.equal(h.clock.timers.size, 0);
+    }
+  });
+}
+
+for (const action of ["cost", "schedule.list", "schedule.show", "schedule.history"]) {
+  test(`controller ${action}: failed on-demand read preserves cache and never creates a mutation receipt`, async () => {
+    const method = action === "cost" ? "cost" : "manage";
+    const params = action === "cost" ? undefined : { action, ...(action === "schedule.list" ? {} : { id: "disabled-demo" }) };
+    let fail = false;
+    const h = await setup(async (input) => {
+      if (input.method === method && fail) throw new Error("On-demand read unavailable");
+      return reply(input);
+    });
+    await h.controller.perform(method, params);
+    const cached = method === "cost" ? h.controller.state.cost : h.controller.state.schedules;
+    const cachedAt = method === "cost" ? h.controller.state.costAt : h.controller.state.schedulesAt;
+    assert.ok(cached);
+    fail = true;
+    await h.controller.perform(method, params);
+    assert.match(h.controller.state.error, /On-demand read unavailable/);
+    assert.equal(method === "cost" ? h.controller.state.cost : h.controller.state.schedules, cached);
+    assert.equal(method === "cost" ? h.controller.state.costAt : h.controller.state.schedulesAt, cachedAt);
+    await h.clock.advance(30000);
+    assert.equal(h.calls.filter((input) => input.method === method).length, 2);
+    assert.equal(h.controller.receipts.length, 0);
+    h.controller.unmount();
+  });
+}
+
 test("controller targeted transcript and cost are explicit, unresolved lower bound preserved", async () => {
   const h = await setup(async (input) =>
     reply(
